@@ -40,6 +40,48 @@ Codes: `unauthorized`, `forbidden`, `not_found`, `bad_request`,
 shown. Some errors add context keys (e.g. `valid_evaluators`, `allowed_hosts`,
 `missing_suite_ids`, `pattern`). **No error body ever contains a credential.**
 
+### Reading an error correctly
+
+`detail` is **not a string**. It is an object for every error this API raises,
+and an **array** for FastAPI's own 422 request-validation errors:
+
+```json
+// 400/401/403/404/409 - raised by Prism
+{"detail": {"code": "bad_request", "message": "Endpoint host 'x' is not allowlisted."}}
+
+// 422 - raised by FastAPI before the route runs
+{"detail": [{"type": "missing", "loc": ["body", "name"], "msg": "Field required"}]}
+```
+
+So `body.detail` must never be used as the message — doing so renders
+`"[object Object]"`. Handle both shapes:
+
+```ts
+function errorMessage(body: unknown, status: number): string {
+  const detail = (body as { detail?: unknown })?.detail;
+  if (typeof detail === "string") return detail;                       // defensive
+  if (Array.isArray(detail)) {                                         // 422
+    const first = detail[0] as { loc?: unknown[]; msg?: string } | undefined;
+    const field = Array.isArray(first?.loc) ? first.loc.at(-1) : undefined;
+    return field ? `${field}: ${first?.msg ?? "invalid"}` : (first?.msg ?? `Request failed (${status})`);
+  }
+  const message = (detail as { message?: string })?.message;           // Prism errors
+  return message ?? `Request failed (${status})`;
+}
+```
+
+### Client timeouts
+
+Do not use one short timeout for every route. `POST /connections/{id}/verify`
+makes a **real model call**: measured N-ATLAS latency on a Tesla T4 is about
+**8.3 s** per generation, a cold first call is slower, and the server's own
+budget is `NATLAS_TIMEOUT_MS` (default 60 s, recommended 120 s against Colab).
+A 20 s client abort will cancel legitimate verifications and report "the API
+did not respond in time" when nothing is wrong.
+
+Suggested: ~15 s for ordinary reads, **≥ 90 s** for `/verify`, and no timeout
+(or a very long one) for an export download.
+
 ## Endpoints
 
 | Method | Path | Notes |
