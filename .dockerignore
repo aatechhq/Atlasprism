@@ -1,0 +1,42 @@
+# Build context for services/api/Dockerfile is the REPOSITORY ROOT (the
+# seed script resolves datasets/ relative to it). Without these exclusions the
+# whole frontend tree and both virtualenvs would be uploaded to the builder.
+
+# Frontend -- not in the API image at all (it deploys to Cloudflare Workers)
+apps/
+node_modules/
+.next/
+.open-next/
+.wrangler/
+
+# Python local environments and caches
+**/.venv/
+**/venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.egg-info/
+
+# Secrets must arrive as platform secrets, never baked into a layer
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+
+# Local artifacts, scratch and VCS
+.git/
+.github/
+artifacts/
+.playwright-mcp/
+natlas-inference.zip
+services/inference/
+*.log
+reports/*.json
+reports/*.csv
+
+# Docs and markdown are not needed to run the API
+docs/
+*.md
+!datasets/*.md

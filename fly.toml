@@ -1,0 +1,83 @@
+# Fly.io deployment for services/api (the ATLAS Prism backend).
+#
+# This file sits at the repository ROOT because the build context must be the
+# root: services/api/Dockerfile copies both services/api/ and datasets/, and
+# app/evaluation/seed.py locates datasets/ by walking up from its own file.
+#
+# The frontend is NOT deployed here -- apps/web runs on Cloudflare Workers at
+# https://atlasprism.aatech.ng (see apps/web/wrangler.jsonc).
+#
+# Deploy:  fly deploy --remote-only
+# Secrets: see docs/deployment-api.md -- never put a credential in this file.
+
+app = "atlas-prism-api"
+
+# us-east (Ashburn). Chosen to sit beside the Neon database, which is in
+# aws us-east-2; the API is chatty with Postgres, so DB round-trip latency
+# matters more than distance to the browser.
+primary_region = "iad"
+
+[build]
+  dockerfile = "services/api/Dockerfile"
+
+# Non-secret configuration only. Anything sensitive goes through
+# `fly secrets set`, which is injected at runtime and never stored in a layer.
+[env]
+  PORT = "8000"
+
+  # The deployed frontend origin MUST be listed or the browser blocks every
+  # request before it reaches a route. localhost entries are kept so the same
+  # image serves local frontend development.
+  CORS_ALLOW_ORIGINS = "https://atlasprism.aatech.ng,http://localhost:3000,http://127.0.0.1:3000"
+
+  NATLAS_MODEL_ID = "NCAIR1/N-ATLaS"
+
+  # A T4 generation measures ~8s and a cold first call is slower; 120s is the
+  # value services/inference/colab_launch.md recommends when serving from a
+  # notebook.
+  NATLAS_TIMEOUT_MS = "120000"
+
+  # The Colab service executes generations strictly one at a time -- a higher
+  # bound only queues requests and risks client timeouts (colab_launch.md).
+  RUN_MAX_CONCURRENCY = "1"
+  RUN_MAX_CASES = "200"
+  RUN_MAX_REPEATS = "5"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+
+  # auto_stop is OFF deliberately. An evaluation run executes in-process with
+  # no inbound requests while it works; a suspended machine would abandon it
+  # and the next boot would mark it failed. One always-on 512MB shared-cpu-1x
+  # machine is the cost of not doing that to a judge mid-demo.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ["app"]
+
+  # EXACTLY ONE MACHINE. Machine count is not expressible in fly.toml, so it
+  # is enforced out of band:
+  #
+  #   fly scale count 1 --app atlas-prism-api
+  #
+  # `fly deploy` creates a SECOND machine for high availability by default,
+  # and that breaks this app: app/main.py's lifespan calls
+  # recover_interrupted_runs() at startup, which marks every non-terminal run
+  # failed. A second machine booting while the first is mid-run would mark
+  # that live run failed. Two machines also race on `alembic upgrade head`
+  # and on seeding. After any deploy, re-check `fly machines list` and scale
+  # back to 1 if Fly added one.
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "40s"
+    method = "GET"
+    # Liveness of the API process only -- this says nothing about N-ATLAS.
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpus = 1
