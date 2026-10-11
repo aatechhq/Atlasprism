@@ -22,21 +22,21 @@ clean type-check, or a reachable `/health` endpoint.
 | PostgreSQL schema (10 tables), Alembic from blank DB | yes | yes | yes |
 | Auth (JWT + PBKDF2), project scoping | yes | yes | yes |
 | Projects & connections CRUD | yes | yes | yes |
-| N-ATLAS connector + error taxonomy | yes | yes | **partial — see below** |
+| N-ATLAS connector + error taxonomy | yes | yes | **partial — contract proven over HTTP; not yet against the official weights** |
 | Run manager (persist-first, bounded concurrency) | yes | yes | yes |
 | Guard scorers (4 types) | yes | yes | yes |
 | Shield detectors (3 types) | yes | yes | yes |
 | 10 Guard + 10 Shield baseline cases | yes | yes | yes |
 | Pulse metrics from persisted traces | yes | yes | yes |
 | JSON + CSV exports with redaction | yes | yes | yes |
-| Standalone GPU inference service | yes | yes | **no — not run on a GPU yet** |
+| Standalone GPU inference service | yes | yes | **model verified on T4 in Colab; not yet serving through Prism** |
 | Frontend (`apps/web`) | no — the frontend's scope | — | — |
 
 ## Test results (actually executed)
 
 ```
 services/api       : 97 passed          (pytest -q)
-services/inference : 16 passed, 1 skipped (pytest -q)
+services/inference : 23 passed, 1 skipped (pytest -q)
 ```
 
 The skip is `test_engine_refuses_cpu_load_unless_explicitly_allowed`, which
@@ -82,29 +82,58 @@ outside the repository so it cannot be mistaken for product code or evidence.
 
 ## Blocked
 
-### 1. Live N-ATLAS inference — BLOCKED
+### 1. Prism-to-N-ATLAS integration — PARTIALLY CLEARED, not yet complete
 
-No successful generation from the official `NCAIR1/N-ATLaS` weights has been
-recorded. Current state:
+**The model itself is confirmed working.** Reported by the project owner on
+2026-10-11, from Google Colab:
 
-- Model access granted on Hugging Face (account `AA-tech`), authentication
-  successful.
-- Target GPU: Colab T4 (14.6 GB), 4-bit NF4 via Transformers + BitsAndBytes.
-- Model loading was in progress at the time of writing; **inference not yet
-  confirmed**.
-- The documented public gateway
-  (`kambah123--natlas-serve-natlasservice-serve.modal.run`) was probed from
-  this machine on 2026-10-11 and **did not respond within 91 seconds** to an
-  unauthenticated `GET /health`, while control hosts answered in under a
-  second. We also have no Bearer key for it. It is treated as unavailable.
+| | |
+|---|---|
+| Model | `NCAIR1/N-ATLaS` (official weights, gated repo) |
+| Hugging Face account | `AA-tech`, access granted, auth successful |
+| GPU | NVIDIA Tesla T4, 14.6 GB |
+| Quantization | 4-bit NF4 |
+| GPU allocation | 5.32 GB |
+| Measured inference latency | **8.27 s** |
+| Result | A valid response to a real inference request |
 
-Until a real generation is recorded, every connection reports `blocked` and
-every export says live inference was not verified. The connector, the engine
-and the inference service are complete and waiting on this.
+That is a real generation from the real weights, and it clears the question of
+whether we can run the model at all.
 
-**To clear it:** stand up `services/inference` on the GPU host, confirm a real
-completion, then set `NATLAS_BASE_URL` / `NATLAS_API_KEY` /
-`NATLAS_ALLOWED_HOSTS` and call `POST /api/v1/connections/{id}/verify`.
+**It is not yet the integration.** No request has been made *from Prism* to
+that model. A successful generation in a notebook and a successful generation
+through Prism are two different claims, and only the second one makes the
+integration real:
+
+- Every `model_connections` row still reads `blocked` or `unverified`.
+- Every export still states that live inference was not verified for the run.
+- `POST /api/v1/connections/{id}/verify` has never returned
+  `verified: true` against the official weights.
+
+**What remains, concretely:**
+
+1. Serve the already-loaded Colab model with
+   `attach_preloaded(model, tokenizer, api_key=…)` —
+   see [`../services/inference/colab_launch.md`](../services/inference/colab_launch.md),
+   Path A. Nothing is re-downloaded and no second copy goes on the GPU.
+2. Expose it (Cloudflare quick tunnel) and set `NATLAS_BASE_URL`,
+   `NATLAS_API_KEY`, `NATLAS_ALLOWED_HOSTS`, and
+   `NATLAS_TIMEOUT_MS=120000` (8 s/generation needs headroom).
+3. Call `POST /api/v1/connections/{id}/verify` and keep the response.
+4. Launch the 20-case baseline run with **`max_concurrency: 1`** — the service
+   generates strictly one at a time, because a T4 holding an 8B model at 4-bit
+   has no room for parallel decoding. Expect roughly three minutes for 22
+   attempts at ~8 s each.
+
+Only after step 3 returns `verified: true` may this be described as a working
+N-ATLAS integration.
+
+**Separately:** the previously documented public gateway
+(`kambah123--natlas-serve-natlasservice-serve.modal.run`) was probed from this
+machine on 2026-10-11 and **did not respond within 91 seconds** to an
+unauthenticated `GET /health`, while control hosts answered in under a second.
+We have no Bearer key for it either. It is treated as unavailable; we serve the
+model ourselves instead.
 
 ### 2. Open-source licence — BLOCKED (owner decision)
 
@@ -134,6 +163,12 @@ remote and a hosting target for the API + PostgreSQL are needed.
 - **Shield secret detection is literal.** S08 seeds three obvious variants, but
   a secret leaked via base64 or ROT13 would not be caught. Stated in the case's
   own notes and in the methodology document.
+- **Inference is sequential on the GPU host.** The inference service holds one
+  generation at a time behind a lock, and runs each in a worker thread so
+  `/health` stays responsive. This is a deliberate fit to a Tesla T4 holding an
+  8B model at 4-bit: parallel decoding would contend for VRAM and could OOM
+  mid-run. Concurrent callers queue. Launch Prism runs with
+  `max_concurrency: 1` against such a host.
 - **Latency is client-side** and includes network time.
 - **Guard proves text and structure, not truth.** There is no general
   hallucination detector, and no claim of one.

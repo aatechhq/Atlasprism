@@ -1,6 +1,7 @@
 """HTTP surface: /health, /v1/models, /v1/chat/completions."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import Annotated, Any, Literal
@@ -9,9 +10,11 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from dataclasses import replace
+
 from natlas_inference import __version__
 from natlas_inference.config import Config
-from natlas_inference.engine import Engine, TransformersEngine
+from natlas_inference.engine import Engine, PreloadedEngine, TransformersEngine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("natlas_inference")
@@ -19,6 +22,12 @@ log = logging.getLogger("natlas_inference")
 CONFIG: Config = Config.from_env()
 ENGINE: Engine | None = None
 bearer = HTTPBearer(auto_error=False)
+
+# One generation at a time. A Tesla T4 holding an 8B model at 4-bit has no
+# headroom for concurrent decoding: parallel requests would contend for VRAM
+# and could OOM mid-run. Requests queue here instead, which is slower but
+# never fails for a reason the caller cannot see.
+GENERATION_LOCK = asyncio.Lock()
 
 
 class Message(BaseModel):
@@ -35,9 +44,31 @@ class ChatRequest(BaseModel):
 
 
 def set_engine(engine: Engine | None) -> None:
-    """Injection point: tests pass a stub, the GPU host passes TransformersEngine."""
+    """Injection point: tests pass a stub, the GPU host passes a real engine."""
     global ENGINE
     ENGINE = engine
+
+
+def attach_preloaded(model, tokenizer, model_id: str | None = None,
+                     api_key: str | None = None) -> None:
+    """Serve a model that is ALREADY loaded in this process.
+
+    The Colab path. Call this from the notebook after the model is on the GPU:
+
+        from natlas_inference.app import app, attach_preloaded
+        attach_preloaded(model, tokenizer, api_key=MY_KEY)
+
+    Nothing is re-downloaded and no second copy is placed on the GPU.
+    """
+    global CONFIG
+    resolved_id = model_id or CONFIG.model_id
+    if api_key:
+        CONFIG = replace(CONFIG, api_key=api_key, model_id=resolved_id, preload=False)
+    else:
+        CONFIG = replace(CONFIG, model_id=resolved_id, preload=False)
+    CONFIG.require_api_key()
+    set_engine(PreloadedEngine(model, tokenizer, model_id=resolved_id))
+    log.info("Attached preloaded model %s (no reload).", resolved_id)
 
 
 def set_config(config: Config) -> None:
@@ -102,6 +133,8 @@ def health() -> dict[str, Any]:
         "model_id": CONFIG.model_id,
         "model_loaded": bool(ENGINE and ENGINE.loaded),
         "quantization": "nf4-4bit" if CONFIG.load_in_4bit else "none",
+        "busy": GENERATION_LOCK.locked(),
+        "execution": "sequential (one generation at a time)",
         "note": (
             "Liveness only. A loaded model is not evidence of a successful "
             "generation - call POST /v1/chat/completions."
@@ -123,7 +156,7 @@ def list_models() -> dict[str, Any]:
 
 
 @app.post("/v1/chat/completions", tags=["inference"], dependencies=[Depends(require_auth)])
-def chat_completions(body: ChatRequest) -> dict[str, Any]:
+async def chat_completions(body: ChatRequest) -> dict[str, Any]:
     if ENGINE is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -139,13 +172,18 @@ def chat_completions(body: ChatRequest) -> dict[str, Any]:
         )
 
     max_new = min(body.max_tokens or CONFIG.max_new_tokens, CONFIG.max_new_tokens)
+    engine = ENGINE
     try:
-        gen = ENGINE.generate(
-            [m.model_dump() for m in body.messages],
-            max_new_tokens=max_new,
-            temperature=body.temperature,
-            language=body.language,
-        )
+        # Serialize generations, and run each in a worker thread so /health
+        # stays responsive while the GPU is busy.
+        async with GENERATION_LOCK:
+            gen = await asyncio.to_thread(
+                engine.generate,
+                [m.model_dump() for m in body.messages],
+                max_new_tokens=max_new,
+                temperature=body.temperature,
+                language=body.language,
+            )
     except RuntimeError as exc:
         # e.g. no GPU, or OOM. Reported as an upstream failure, never as a completion.
         raise HTTPException(

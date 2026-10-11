@@ -1,138 +1,228 @@
 # Running the N-ATLAS inference service on Colab
 
-Copy-paste cells for a T4 runtime. **Runtime → Change runtime type → T4 GPU**
-first, then confirm with cell 1.
+Two paths. **Use path A** if the model is already loaded in your notebook — it
+is the normal case once you have confirmed inference, and it neither
+re-downloads the weights nor places a second copy on the GPU.
 
 Nothing here runs on a local laptop: the model is loaded only on the GPU host.
 
-## 1. Confirm the GPU
+---
+
+## Path A — serve a model that is already loaded (recommended)
+
+Preconditions: your notebook already has `model` and `tokenizer` in memory, on
+the GPU, and you have confirmed a real generation.
+
+### A1. Get the service code onto the runtime
+
+```python
+# Replace with the repository URL once it is pushed.
+!git clone <YOUR-REPO-URL> /content/atlas-prism
+import sys
+sys.path.insert(0, "/content/atlas-prism/services/inference")
+```
+
+Or upload the `services/inference/` folder and point `sys.path` at it. The
+service needs only `fastapi`, `uvicorn` and `pydantic` — if they are missing:
+
+```python
+!pip -q install "fastapi>=0.115" "uvicorn[standard]>=0.32" "pydantic>=2.9"
+```
+
+### A2. Generate a key and attach the loaded model
+
+```python
+import os, secrets
+
+API_KEY = secrets.token_urlsafe(32)
+print("Give this to Prism as NATLAS_API_KEY:\n", API_KEY)
+
+from natlas_inference.app import app, attach_preloaded
+
+# `model` and `tokenizer` are YOUR existing objects. Nothing is re-downloaded.
+attach_preloaded(model, tokenizer, model_id="NCAIR1/N-ATLaS", api_key=API_KEY)
+```
+
+`attach_preloaded` serves the exact objects you pass, sets `preload=False`, and
+refuses to run without an API key.
+
+### A3. Start the server in a background thread
+
+Colab already runs an event loop, so run uvicorn on its own thread rather than
+reaching for `nest_asyncio`:
+
+```python
+import threading, uvicorn
+
+server = uvicorn.Server(uvicorn.Config(app, host="0.0.0.0", port=8000,
+                                       log_level="info"))
+threading.Thread(target=server.run, daemon=True).start()
+```
+
+### A4. Confirm it inside Colab before exposing it
+
+```python
+import json, urllib.request
+
+def call(path, body=None):
+    req = urllib.request.Request(
+        "http://127.0.0.1:8000" + path,
+        data=json.dumps(body).encode() if body else None,
+        headers={"Content-Type": "application/json",
+                 "Authorization": f"Bearer {API_KEY}"},
+    )
+    return json.load(urllib.request.urlopen(req, timeout=600))
+
+print(json.load(urllib.request.urlopen("http://127.0.0.1:8000/health")))
+print(call("/v1/models"))
+
+out = call("/v1/chat/completions", {
+    "model": "NCAIR1/N-ATLaS",
+    "messages": [{"role": "user", "content": "Sannu! Menene babban birnin Najeriya?"}],
+    "language": "ha",
+    "max_tokens": 64,
+})
+print(out["content"])
+print("latency_ms:", out["latency_ms"], "| usage:", out["usage"])
+```
+
+**Save this cell's output.** With its timestamp it is the integration evidence
+worth keeping: the model id, the real latency, and the generated text.
+
+Then continue at [**Connecting Prism**](#connecting-prism) below.
+
+---
+
+## Path B — let the service load the model itself
+
+Use this on a fresh runtime, or on dedicated GPU hosting where no notebook has
+loaded anything yet.
+
+### B1. Confirm the GPU
 
 ```python
 !nvidia-smi
 import torch; print("CUDA:", torch.cuda.is_available(), torch.cuda.get_device_name(0))
 ```
 
-## 2. Install dependencies
+### B2. Install the GPU dependencies
 
 ```python
 !pip -q install "transformers>=4.44" "accelerate>=0.34" "bitsandbytes>=0.43" \
                 "sentencepiece>=0.2" "fastapi>=0.115" "uvicorn[standard]>=0.32"
 ```
 
-## 3. Authenticate to Hugging Face
+### B3. Authenticate to Hugging Face
 
-Use a token with access to the gated repo. Paste it into the prompt — do not
-hard-code it in a cell you might share.
+The model is gated, so the token needs access to it. Paste it into the prompt
+rather than hard-coding it in a cell you might share.
 
 ```python
 from huggingface_hub import notebook_login
 notebook_login()
 ```
 
-## 4. Get the service code
-
-```python
-# Replace with the repository URL once it is pushed.
-!git clone <YOUR-REPO-URL> atlas-prism
-%cd atlas-prism/services/inference
-```
-
-Or upload the `services/inference/` folder directly.
-
-## 5. Set the service key and start it
+### B4. Configure and start
 
 ```python
 import os, secrets
 os.environ["INFERENCE_API_KEY"] = secrets.token_urlsafe(32)
 os.environ["MODEL_ID"] = "NCAIR1/N-ATLaS"
 os.environ["LOAD_IN_4BIT"] = "1"
-print("Give this key to Prism as NATLAS_API_KEY:")
-print(os.environ["INFERENCE_API_KEY"])
+print("NATLAS_API_KEY for Prism:", os.environ["INFERENCE_API_KEY"])
 ```
 
 ```python
+%cd /content/atlas-prism/services/inference
 import subprocess, sys
 proc = subprocess.Popen([sys.executable, "serve.py", "--port", "8000"])
 ```
 
-Loading an 8B model at 4-bit takes a few minutes on a T4. Watch for
-`Model loaded.`
+Loading an 8B model at 4-bit NF4 takes a few minutes on a T4 (about 5.3 GB of
+VRAM). Wait for `Model loaded.`, then verify with the cell in **A4**.
 
-## 6. Verify locally inside Colab first
+---
 
-```python
-import json, urllib.request, os
-key = os.environ["INFERENCE_API_KEY"]
+## Expose it with a tunnel
 
-def post(path, body):
-    req = urllib.request.Request(
-        "http://127.0.0.1:8000" + path,
-        data=json.dumps(body).encode(),
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"},
-    )
-    return json.load(urllib.request.urlopen(req, timeout=300))
-
-print(json.load(urllib.request.urlopen("http://127.0.0.1:8000/health")))
-print(post("/v1/chat/completions", {
-    "model": "NCAIR1/N-ATLaS",
-    "messages": [{"role": "user", "content": "Sannu! Menene babban birnin Najeriya?"}],
-    "language": "ha",
-    "max_tokens": 64,
-}))
-```
-
-If that returns real generated text, **inference works**. That is the moment
-the integration stops being blocked — and the output of this cell, with its
-timestamp, is the integration evidence worth saving.
-
-## 7. Expose it with a tunnel
-
-Cloudflare quick tunnel (no account needed):
+Cloudflare quick tunnel, no account needed:
 
 ```python
 !wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -O cloudflared
 !chmod +x cloudflared
+
 import subprocess
 tunnel = subprocess.Popen(["./cloudflared", "tunnel", "--url", "http://localhost:8000",
-                           "--no-autoupdate"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-# Watch the output for the https://<random>.trycloudflare.com URL.
+                           "--no-autoupdate"],
+                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 for line in tunnel.stdout:
     print(line, end="")
     if "trycloudflare.com" in line:
         break
 ```
 
-## 8. Point Prism at it
+Note the `https://<random>.trycloudflare.com` hostname it prints.
 
-On the machine running the Prism API, in `services/api/.env`:
+---
+
+## Connecting Prism
+
+On the machine running the Prism API, edit `services/api/.env`:
 
 ```
 NATLAS_BASE_URL=https://<your-tunnel-host>
-NATLAS_API_KEY=<the key printed in step 5>
+NATLAS_API_KEY=<the key printed above>
 NATLAS_ALLOWED_HOSTS=<your-tunnel-host>
+NATLAS_TIMEOUT_MS=120000
 ```
 
-`NATLAS_ALLOWED_HOSTS` must contain the tunnel host or Prism refuses to call it
-— that allowlist is the SSRF guard, and it is doing its job if it blocks a URL
-you forgot to add.
+Three things to get right:
 
-Then restart the Prism API and verify through Prism itself:
+- **`NATLAS_ALLOWED_HOSTS` must contain the tunnel host**, or Prism refuses to
+  call it. That allowlist is the SSRF guard; it is doing its job if it blocks a
+  URL you forgot to add.
+- **Raise `NATLAS_TIMEOUT_MS`.** Measured latency on a T4 is around 8 seconds
+  per generation, and a long prompt or a cold first call is slower. 120000
+  (2 minutes) leaves comfortable headroom.
+- **Use `max_concurrency: 1` when launching runs.** The service executes
+  generations strictly one at a time (a T4 holding an 8B model at 4-bit has no
+  headroom for parallel decoding), so a higher value only queues requests and
+  risks client timeouts. A 20-case suite at ~8s per case takes roughly three
+  minutes.
+
+Restart the Prism API, then verify **through Prism** — this is the step that
+actually proves the integration:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/connections/<connection-id>/verify \
      -H "Authorization: Bearer <prism-token>"
 ```
 
-A `"verified": true` response here is the real thing: Prism made an
-authenticated generation call against the actual model and recorded the
-latency, model id and response excerpt.
+```json
+{
+  "verified": true, "state": "verified", "outcome": "ok",
+  "model_id": "NCAIR1/N-ATLaS", "latency_ms": 8270, "upstream_status": 200,
+  "detail": "Authenticated inference succeeded in 8270ms (HTTP 200, model NCAIR1/N-ATLaS)."
+}
+```
+
+Until that response comes back `verified: true`, Prism-to-N-ATLAS integration
+is **not** complete, however well the model runs inside Colab. A successful
+generation in a notebook and a successful generation through Prism are two
+different claims, and only the second one is the integration.
+
+---
 
 ## Limitations to keep in mind
 
 - **The tunnel URL is temporary.** It changes on every restart and dies with
   the runtime. Update `NATLAS_BASE_URL` and `NATLAS_ALLOWED_HOSTS` each time.
-- **Colab runtimes are reclaimed.** For the judging period, move this service
-  to dedicated GPU hosting and use a stable hostname.
+- **Colab runtimes are reclaimed**, including mid-run. For the judging period,
+  move the service to dedicated GPU hosting with a stable hostname; that is a
+  configuration change in Prism, not a code change.
 - **A quick tunnel is public.** The Bearer key is the only thing protecting a
-  GPU endpoint, so use a long random key and rotate it if it is ever shared in
-  a screenshot or log.
+  GPU endpoint, so use a long random key and rotate it if it ever appears in a
+  screenshot, a log or a shared notebook.
+- **If the runtime dies mid-run**, Prism records those cases as `error` with an
+  honest outcome (`timeout` or `network`) rather than as test failures, and the
+  run ends `partially_completed` or `failed`.

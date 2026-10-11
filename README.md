@@ -23,11 +23,14 @@ judging what works. The short version:
 
 - The backend, database, evaluation engine, 10 Guard + 10 Shield baseline
   cases, Pulse metrics and JSON/CSV exports are **implemented and tested**.
-- **Live inference against the official N-ATLAS weights is NOT yet verified.**
-  The connector is complete and the contract is proven end to end against a
-  locally-hosted instance of our own inference service, but a real
-  `NCAIR1/N-ATLaS` generation has not yet been recorded. Until it is, every
-  connection reports `blocked` rather than a fabricated success.
+- **The model is confirmed running:** `NCAIR1/N-ATLaS` generated a real
+  response on a Tesla T4 at 4-bit NF4 (5.32 GB, 8.27 s) on 2026-10-11.
+- **Prism-to-N-ATLAS integration is NOT yet complete.** No request has been
+  made *from Prism* to those weights, so every connection still reports
+  `blocked` or `unverified` and every export says live inference was
+  unverified. The connector and the GPU inference service are finished and
+  waiting on that one step —
+  `POST /api/v1/connections/{id}/verify` returning `verified: true`.
 - Nothing in this repository simulates inference and presents it as real.
 
 ## Architecture

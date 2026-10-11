@@ -32,6 +32,39 @@ class Engine(Protocol):
                  temperature: float, language: str | None = None) -> Generation: ...
 
 
+class PreloadedEngine:
+    """Wraps a model and tokenizer that are ALREADY loaded in this process.
+
+    This is the Colab path: the notebook has already downloaded, quantized and
+    placed the model on the GPU, and reloading it would waste minutes and VRAM.
+    `attach_preloaded()` in `app.py` hands those live objects to the service.
+
+    It shares its prompt-building and decoding with TransformersEngine so the
+    two paths cannot drift apart.
+    """
+
+    def __init__(self, model, tokenizer, model_id: str = "NCAIR1/N-ATLaS") -> None:
+        if model is None or tokenizer is None:
+            raise ValueError("PreloadedEngine needs a live model and tokenizer.")
+        self.model_id = model_id
+        self._model = model
+        self._tokenizer = tokenizer
+        if getattr(self._tokenizer, "pad_token_id", None) is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
+
+    @property
+    def loaded(self) -> bool:
+        return True
+
+    def load(self) -> None:
+        """Already loaded; nothing to do. Never re-downloads."""
+        return None
+
+    # Reuse the real implementations rather than copying them.
+    generate = None  # replaced below
+    _build_prompt = None  # replaced below
+
+
 class TransformersEngine:
     """Loads `MODEL_ID` with 4-bit NF4 quantization and generates from it.
 
@@ -140,3 +173,9 @@ class TransformersEngine:
         parts = [f"{m.get('role', 'user').upper()}: {m.get('content', '')}" for m in msgs]
         parts.append("ASSISTANT:")
         return "\n".join(parts)
+
+
+# PreloadedEngine deliberately shares TransformersEngine's generation and
+# prompt-building code: one implementation, two ways of obtaining the model.
+PreloadedEngine.generate = TransformersEngine.generate
+PreloadedEngine._build_prompt = TransformersEngine._build_prompt
