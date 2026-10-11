@@ -15,15 +15,31 @@ the GPU, and you have confirmed a real generation.
 
 ### A1. Get the service code onto the runtime
 
-```python
-# Replace with the repository URL once it is pushed.
-!git clone <YOUR-REPO-URL> /content/atlas-prism
-import sys
-sys.path.insert(0, "/content/atlas-prism/services/inference")
+**The repository is private**, so `git clone` in Colab would need credentials
+you should not paste into a notebook. Upload the code instead. Build the
+bundle once, locally:
+
+```bash
+cd services/inference
+python -c "import zipfile,pathlib; z=zipfile.ZipFile('../../natlas-inference.zip','w',zipfile.ZIP_DEFLATED); [z.write(p,p.as_posix()) for p in list(pathlib.Path('.').glob('natlas_inference/*.py'))+[pathlib.Path('serve.py')]]; z.close()"
 ```
 
-Or upload the `services/inference/` folder and point `sys.path` at it. The
-service needs only `fastapi`, `uvicorn` and `pydantic` — if they are missing:
+Then in Colab:
+
+```python
+from google.colab import files
+files.upload()                      # choose natlas-inference.zip
+import zipfile, sys
+zipfile.ZipFile("natlas-inference.zip").extractall("/content/natlas-svc")
+sys.path.insert(0, "/content/natlas-svc")
+```
+
+The uploaded code is byte-identical to `services/inference/` in the
+repository, which is also the better answer if a judge asks what served the
+model. If the repository is public by then, `git clone` works just as well.
+
+The service needs only `fastapi`, `uvicorn` and `pydantic` — if they are
+missing:
 
 ```python
 !pip -q install "fastapi>=0.115" "uvicorn[standard]>=0.32" "pydantic>=2.9"

@@ -27,6 +27,9 @@ desktop.ini
 .idea/
 .vscode/
 
+# Colab upload bundle (regenerate from services/inference/)
+/natlas-inference.zip
+
 # Local artifacts
 *.log
 /tmp/
