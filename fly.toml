@@ -32,6 +32,13 @@ primary_region = "iad"
 
   NATLAS_MODEL_ID = "NCAIR1/N-ATLaS"
 
+  # Neon Auth identity tokens. These are public verification endpoints and
+  # claims, not credentials; the signing keys remain with Neon.
+  AUTH_MODE = "neon"
+  NEON_AUTH_JWKS_URL = "https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech/neondb/auth/.well-known/jwks.json"
+  NEON_AUTH_ISSUER = "https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech/neondb/auth"
+  NEON_AUTH_AUDIENCE = "https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech"
+
   # A T4 generation measures ~8s and a cold first call is slower; 120s is the
   # value services/inference/colab_launch.md recommends when serving from a
   # notebook.

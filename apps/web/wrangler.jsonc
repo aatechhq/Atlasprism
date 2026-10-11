@@ -7,6 +7,9 @@
   ],
   "compatibility_date": "2025-04-01",
   "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "NEON_AUTH_BASE_URL": "https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech/neondb/auth"
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
