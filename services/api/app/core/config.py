@@ -32,6 +32,22 @@ class Settings(BaseSettings):
     natlas_timeout_ms: int = Field(default=60000, alias="NATLAS_TIMEOUT_MS")
     natlas_allowed_hosts: str = Field(default="", alias="NATLAS_ALLOWED_HOSTS")
 
+    # --- Testing ---
+    # Dedicated test database. When set, the suite connects here directly and
+    # never issues CREATE/DROP DATABASE. Required for managed Postgres (Neon):
+    # its pooled endpoint cannot create databases, and deriving an admin URL
+    # from DATABASE_URL would aim DROP DATABASE at the production host.
+    test_database_url: str = Field(default="", alias="TEST_DATABASE_URL")
+
+    # --- CORS ---
+    # Browser origins permitted to call this API. Comma-separated, no trailing
+    # slash. The deployed frontend origin must be listed here or the browser
+    # blocks every request before it reaches a route.
+    cors_allow_origins: str = Field(
+        default="http://localhost:3000,http://127.0.0.1:3000",
+        alias="CORS_ALLOW_ORIGINS",
+    )
+
     # --- Execution bounds (runaway-cost protection) ---
     run_max_concurrency: int = Field(default=2, alias="RUN_MAX_CONCURRENCY")
     run_max_cases: int = Field(default=200, alias="RUN_MAX_CASES")
@@ -51,6 +67,15 @@ class Settings(BaseSettings):
             if parsed.hostname:
                 hosts.add(parsed.hostname.lower())
         return hosts
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Origins the browser may call this API from. Empty means none."""
+        return [
+            o.strip().rstrip("/")
+            for o in self.cors_allow_origins.split(",")
+            if o.strip()
+        ]
 
     @property
     def natlas_credentials_present(self) -> bool:

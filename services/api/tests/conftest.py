@@ -38,6 +38,24 @@ def _test_url() -> str:
 
 @pytest.fixture(scope="session")
 def test_engine():
+    """Engine bound to the test database.
+
+    Two paths. If ``TEST_DATABASE_URL`` is set we connect to it as given and
+    manage only tables -- managed Postgres (Neon) cannot CREATE DATABASE over
+    its pooled endpoint, and ``_admin_url()`` below both drops the connection
+    query string (``?sslmode=require``) and would aim DROP DATABASE at
+    whatever host ``DATABASE_URL`` points to. Otherwise we fall back to the
+    create-and-drop dance, which assumes a local Postgres you own.
+    """
+    if settings.test_database_url:
+        engine = create_engine(settings.test_database_url, future=True)
+        Base.metadata.drop_all(engine)
+        Base.metadata.create_all(engine)
+        yield engine
+        Base.metadata.drop_all(engine)
+        engine.dispose()
+        return
+
     admin = create_engine(_admin_url(), isolation_level="AUTOCOMMIT", future=True)
     with admin.connect() as conn:
         conn.execute(text(f'DROP DATABASE IF EXISTS "{TEST_DB}" WITH (FORCE)'))
