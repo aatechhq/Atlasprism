@@ -2,13 +2,18 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import type { ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import { AuthView } from "@neondatabase/auth/react/ui";
 
 type AuthPath = ComponentProps<typeof AuthView>["path"];
 
 export function AuthPage({ mode }: { mode: AuthPath }) {
+  const [mounted, setMounted] = useState(false);
   const signingUp = mode === "sign-up";
+  const verifyingEmail = mode === "email-verification";
+
+  useEffect(() => setMounted(true), []);
+
   return (
     <main className="auth-page">
       <section className="auth-context" aria-label="About ATLAS Prism">
@@ -27,9 +32,9 @@ export function AuthPage({ mode }: { mode: AuthPath }) {
           <li><span>03</span>Latency and reliability evidence</li>
         </ol>
       </section>
-      <section className="auth-panel" aria-label={signingUp ? "Create account" : "Sign in"}>
+      <section className="auth-panel" aria-label={signingUp ? "Create account" : verifyingEmail ? "Verify email" : "Sign in"}>
         <div className="auth-panel-inner">
-          <AuthView path={mode} />
+          {mounted ? <AuthView path={mode} /> : <p className="auth-view-loading" role="status">Preparing secure form…</p>}
         </div>
       </section>
     </main>
