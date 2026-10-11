@@ -35,8 +35,6 @@ export default function HomePage() {
           <div className="prism-frame">
             <Image src="/atlas-prism-logo.png" alt="" fill sizes="(max-width: 800px) 70vw, 42vw" priority />
           </div>
-          <div className="stage-label stage-label-top">Evaluation record</div>
-          <div className="stage-label stage-label-bottom">Evidence, not claims</div>
         </div>
       </section>
 
