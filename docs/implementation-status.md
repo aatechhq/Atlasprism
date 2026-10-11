@@ -135,12 +135,15 @@ unauthenticated `GET /health`, while control hosts answered in under a second.
 We have no Bearer key for it either. It is treated as unavailable; we serve the
 model ourselves instead.
 
-### 2. Open-source licence — BLOCKED (owner decision)
+### 2. Open-source licence — RESOLVED 2026-10-11
 
-PS1 requires a public repository with a valid OSI licence and a contributing
-guide. `CONTRIBUTING.md` exists. **No `LICENSE` file has been added**, because
-choosing it is the project owner's decision and it has not been made. One has
-not been guessed at.
+**MIT**, chosen by the project owner. `LICENSE` is committed at the repository
+root, copyright "2026 AA Technologies (Azibaola Arikekpar Technologies)".
+`CONTRIBUTING.md` was already present. The PS1 requirement for a valid
+OSI-approved licence plus a contributing guide is therefore met.
+
+If the copyright holder should read differently — a registered company name, or
+Azibaola personally — it is a one-line edit to `LICENSE`.
 
 ### 3. Two external developer testers — BLOCKED (people needed)
 

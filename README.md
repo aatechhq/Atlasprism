@@ -104,10 +104,8 @@ Prism takes the endpoint from `NATLAS_BASE_URL` and the key from
 
 ## Licence
 
-**Not yet chosen.** PS1 requires a public repository under a valid open-source
-licence; selecting it is the project owner's decision and it has not been made
-yet. No `LICENSE` file is included rather than one being guessed at. See
-`docs/implementation-status.md`.
+[MIT](LICENSE) — chosen by the project owner on 2026-10-11. Copyright holder:
+AA Technologies (Azibaola Arikekpar Technologies).
 
 ## Contributing
 
