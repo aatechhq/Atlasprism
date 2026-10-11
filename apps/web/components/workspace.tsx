@@ -5,7 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Activity, BarChart3, BookOpenCheck, Boxes, FileDown, FolderKanban, LogOut, Menu, Play, ShieldCheck, X } from "lucide-react";
-import { api, getToken, setToken } from "@/lib/api";
+import { api } from "@/lib/api";
+import { authClient } from "@/lib/auth/client";
 import type { Project } from "@/lib/types";
 
 type Workspace = { projects: Project[]; project: Project | null; loading: boolean; error: string | null; setProjectId: (id: string) => void; refresh: () => Promise<void> };
@@ -15,10 +16,9 @@ export function useWorkspace() { const value = useContext(WorkspaceContext); if 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter(); const [projects, setProjects] = useState<Project[]>([]); const [projectId, setProjectIdState] = useState(""); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
   const refresh = useCallback(async () => {
-    if (!getToken()) { setLoading(false); router.replace("/login"); return; }
     setLoading(true); setError(null);
     try { const data = await api<Project[]>("/projects"); setProjects(data); setProjectIdState(current => current && data.some(p => p.id === current) ? current : (localStorage.getItem("prism_project") && data.some(p => p.id === localStorage.getItem("prism_project")) ? localStorage.getItem("prism_project")! : data[0]?.id ?? "")); }
-    catch (e) { if ((e as {status?:number}).status === 401) { setToken(null); router.replace("/login"); } else setError((e as Error).message); }
+    catch (e) { if ((e as {status?:number}).status === 401) { router.replace("/login"); } else setError((e as Error).message); }
     finally { setLoading(false); }
   }, [router]);
   useEffect(() => { void refresh(); }, [refresh]);
@@ -40,7 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <nav className="nav">{nav.map(([href,label,Icon]) => <Link key={href} href={href} className={pathname === href || (href !== "/dashboard" && pathname.startsWith(href+"/")) ? "active" : ""} onClick={() => setOpen(false)}><Icon/><span>{label}</span></Link>)}</nav>
       <div className="sidebar-foot"><div className="api-label"><span className="dot"/><span>Live API mode</span></div></div>
     </aside>
-    <div className="content"><header className="topbar"><div className="top-actions"><button className="btn btn-secondary icon-btn mobile-menu" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={18}/></button><span className="top-title">{title}</span></div><div className="top-actions"><select className="select project-select" aria-label="Current project" value={project?.id ?? ""} onChange={e => setProjectId(e.target.value)} disabled={!projects.length}><option value="">{projects.length ? "Select project" : "No project"}</option>{projects.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><button className="btn btn-secondary icon-btn" aria-label="Sign out" title="Sign out" onClick={() => { setToken(null); router.push("/login"); }}><LogOut size={17}/></button></div></header><main className="main">{children}</main></div>
+    <div className="content"><header className="topbar"><div className="top-actions"><button className="btn btn-secondary icon-btn mobile-menu" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={18}/></button><span className="top-title">{title}</span></div><div className="top-actions"><select className="select project-select" aria-label="Current project" value={project?.id ?? ""} onChange={e => setProjectId(e.target.value)} disabled={!projects.length}><option value="">{projects.length ? "Select project" : "No project"}</option>{projects.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><button className="btn btn-secondary icon-btn" aria-label="Sign out" title="Sign out" onClick={() => { void authClient.signOut().finally(() => router.push("/login")); }}><LogOut size={17}/></button></div></header><main className="main">{children}</main></div>
   </div>;
 }
 

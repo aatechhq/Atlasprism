@@ -39,7 +39,10 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = _pk()
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    auth_subject: Mapped[str | None] = mapped_column(
+        String(255), unique=True, nullable=True, index=True
+    )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[dt.datetime] = _created()
     updated_at: Mapped[dt.datetime] = _updated()

@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = Field(default=720, alias="JWT_EXPIRE_MINUTES")
     admin_email: str = Field(default="admin@example.com", alias="ADMIN_EMAIL")
     admin_password: str = Field(default="", alias="ADMIN_PASSWORD")
+    auth_mode: str = Field(default="local", alias="AUTH_MODE")
+    neon_auth_jwks_url: str = Field(default="", alias="NEON_AUTH_JWKS_URL")
+    neon_auth_issuer: str = Field(default="", alias="NEON_AUTH_ISSUER")
+    neon_auth_audience: str = Field(default="", alias="NEON_AUTH_AUDIENCE")
 
     # --- N-ATLAS gateway (PRD 7) ---
     natlas_base_url: str = Field(default="", alias="NATLAS_BASE_URL")

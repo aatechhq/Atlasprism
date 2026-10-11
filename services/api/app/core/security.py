@@ -12,9 +12,11 @@ import datetime as dt
 import hashlib
 import hmac
 import secrets
+from functools import lru_cache
 from typing import Any
 
 import jwt
+from jwt import PyJWKClient
 
 from app.core.config import settings
 
@@ -58,6 +60,40 @@ def decode_access_token(token: str) -> dict[str, Any] | None:
     try:
         return jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
     except jwt.PyJWTError:
+        return None
+
+
+@lru_cache(maxsize=1)
+def _neon_jwks_client() -> PyJWKClient:
+    return PyJWKClient(settings.neon_auth_jwks_url)
+
+
+def decode_neon_token(token: str) -> dict[str, Any] | None:
+    """Verify a Neon Auth JWT against its rotating public keys."""
+    if not settings.neon_auth_jwks_url:
+        return None
+    try:
+        signing_key = _neon_jwks_client().get_signing_key_from_jwt(token)
+        options: dict[str, Any] = {
+            "require": ["exp", "sub"],
+        }
+        kwargs: dict[str, Any] = {}
+        if settings.neon_auth_issuer:
+            kwargs["issuer"] = settings.neon_auth_issuer
+        else:
+            options["verify_iss"] = False
+        if settings.neon_auth_audience:
+            kwargs["audience"] = settings.neon_auth_audience
+        else:
+            options["verify_aud"] = False
+        return jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["EdDSA"],
+            options=options,
+            **kwargs,
+        )
+    except (jwt.PyJWTError, ValueError):
         return None
 
 

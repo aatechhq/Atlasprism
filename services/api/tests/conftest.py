@@ -11,6 +11,7 @@ import os
 
 # Must be set before app.connectors.fake is imported anywhere.
 os.environ["ATLAS_PRISM_ALLOW_FAKE_CONNECTOR"] = "1"
+os.environ["AUTH_MODE"] = "local"
 
 import pytest
 from fastapi.testclient import TestClient

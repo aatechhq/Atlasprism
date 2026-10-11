@@ -6,9 +6,6 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-export function getToken() { return typeof window === "undefined" ? null : sessionStorage.getItem("prism_token"); }
-export function setToken(token: string | null) { if (typeof window !== "undefined") token ? sessionStorage.setItem("prism_token", token) : sessionStorage.removeItem("prism_token"); }
-
 export function errorMessage(body: unknown, status: number): string {
   const detail = (body as { detail?: unknown } | null)?.detail;
   if (typeof detail === "string") return detail;
@@ -22,7 +19,7 @@ export function errorMessage(body: unknown, status: number): string {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = getToken();
+  const token = await getAccessToken();
   const controller = new AbortController();
   const timeoutMs = /^\/connections\/[^/]+\/verify$/.test(path)
     ? VERIFY_TIMEOUT_MS
@@ -47,9 +44,10 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export async function download(path: string, filename: string) {
-  const token = getToken();
+  const token = await getAccessToken();
   const response = await fetch(`${BASE}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
   if (!response.ok) throw new ApiError(response.status, "Export could not be generated.");
   const url = URL.createObjectURL(await response.blob());
   const anchor = document.createElement("a"); anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
 }
+import { getAccessToken } from "@/lib/auth/client";

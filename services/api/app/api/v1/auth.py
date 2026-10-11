@@ -20,7 +20,7 @@ router = APIRouter(tags=["auth"])
 def login(body: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.scalar(select(User).where(User.email == body.email.strip().lower()))
     # Same error for unknown email and wrong password: no account enumeration.
-    if user is None or not verify_password(body.password, user.password_hash):
+    if user is None or not user.password_hash or not verify_password(body.password, user.password_hash):
         raise Unauthorized("Invalid email or password.")
     return TokenResponse(
         access_token=create_access_token(str(user.id)),
