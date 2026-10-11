@@ -1,0 +1,52 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import { Activity, BarChart3, BookOpenCheck, Boxes, FileDown, FolderKanban, LogOut, Menu, Play, ShieldCheck, X } from "lucide-react";
+import { api, getToken, setToken } from "@/lib/api";
+import type { Project } from "@/lib/types";
+
+type Workspace = { projects: Project[]; project: Project | null; loading: boolean; error: string | null; setProjectId: (id: string) => void; refresh: () => Promise<void> };
+const WorkspaceContext = createContext<Workspace | null>(null);
+export function useWorkspace() { const value = useContext(WorkspaceContext); if (!value) throw new Error("WorkspaceProvider missing"); return value; }
+
+export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter(); const [projects, setProjects] = useState<Project[]>([]); const [projectId, setProjectIdState] = useState(""); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
+  const refresh = useCallback(async () => {
+    if (!getToken()) { setLoading(false); router.replace("/login"); return; }
+    setLoading(true); setError(null);
+    try { const data = await api<Project[]>("/projects"); setProjects(data); setProjectIdState(current => current && data.some(p => p.id === current) ? current : (localStorage.getItem("prism_project") && data.some(p => p.id === localStorage.getItem("prism_project")) ? localStorage.getItem("prism_project")! : data[0]?.id ?? "")); }
+    catch (e) { if ((e as {status?:number}).status === 401) { setToken(null); router.replace("/login"); } else setError((e as Error).message); }
+    finally { setLoading(false); }
+  }, [router]);
+  useEffect(() => { void refresh(); }, [refresh]);
+  const setProjectId = (id: string) => { setProjectIdState(id); localStorage.setItem("prism_project", id); };
+  const value = useMemo(() => ({ projects, project: projects.find(p => p.id === projectId) ?? null, loading, error, setProjectId, refresh }), [projects, projectId, loading, error, refresh]);
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+}
+
+const nav = [
+  ["/dashboard", "Overview", BarChart3], ["/projects", "Projects", FolderKanban], ["/suites", "Test Suites", Boxes], ["/runs", "Run Evaluation", Play], ["/results", "Results", BookOpenCheck], ["/pulse", "Pulse", Activity], ["/reports", "Reports", FileDown],
+] as const;
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname(); const router = useRouter(); const { projects, project, setProjectId } = useWorkspace(); const [open, setOpen] = useState(false);
+  const title = nav.find(([href]) => pathname.startsWith(href))?.[1] ?? "ATLAS Prism";
+  return <div className="shell">
+    <aside className={`sidebar ${open ? "open" : ""}`} aria-label="Primary navigation">
+      <div className="brand"><span className="brand-logo"><Image src="/atlas-prism-logo.png" alt="ATLAS Prism crystal" width={34} height={34} priority/></span><div className="brand-copy"><div className="brand-title">ATLAS Prism</div><div className="brand-sub">Evaluation assurance</div></div><button className="btn icon-btn mobile-menu" onClick={() => setOpen(false)} aria-label="Close navigation"><X size={18}/></button></div>
+      <nav className="nav">{nav.map(([href,label,Icon]) => <Link key={href} href={href} className={pathname === href || (href !== "/dashboard" && pathname.startsWith(href+"/")) ? "active" : ""} onClick={() => setOpen(false)}><Icon/><span>{label}</span></Link>)}</nav>
+      <div className="sidebar-foot"><div className="api-label"><span className="dot"/><span>Live API mode</span></div></div>
+    </aside>
+    <div className="content"><header className="topbar"><div className="top-actions"><button className="btn btn-secondary icon-btn mobile-menu" onClick={() => setOpen(true)} aria-label="Open navigation"><Menu size={18}/></button><span className="top-title">{title}</span></div><div className="top-actions"><select className="select project-select" aria-label="Current project" value={project?.id ?? ""} onChange={e => setProjectId(e.target.value)} disabled={!projects.length}><option value="">{projects.length ? "Select project" : "No project"}</option>{projects.map(p => <option value={p.id} key={p.id}>{p.name}</option>)}</select><button className="btn btn-secondary icon-btn" aria-label="Sign out" title="Sign out" onClick={() => { setToken(null); router.push("/login"); }}><LogOut size={17}/></button></div></header><main className="main">{children}</main></div>
+  </div>;
+}
+
+export function ProtectedLayout({ children }: { children: React.ReactNode }) { return <WorkspaceProvider><AppShell>{children}</AppShell></WorkspaceProvider>; }
+
+export function PageHead({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: React.ReactNode }) { return <div className="page-head"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p className="lede">{description}</p></div>{action}</div>; }
+export function StatusBadge({ status }: { status: string }) { return <span className={`badge ${status.toLowerCase()}`}>{status.replaceAll("_", " ")}</span>; }
+export function Empty({ icon: Icon = ShieldCheck, title, text, action }: { icon?: typeof ShieldCheck; title: string; text: string; action?: React.ReactNode }) { return <div className="empty"><Icon className="empty-icon"/><h3>{title}</h3><p>{text}</p>{action}</div>; }
+export function Notice({ children, error = false }: { children: React.ReactNode; error?: boolean }) { return <div className={`notice ${error ? "error-box" : ""}`} role={error ? "alert" : "status"}><ShieldCheck size={18}/><div>{children}</div></div>; }

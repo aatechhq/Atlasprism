@@ -30,7 +30,7 @@ clean type-check, or a reachable `/health` endpoint.
 | Pulse metrics from persisted traces | yes | yes | yes |
 | JSON + CSV exports with redaction | yes | yes | yes |
 | Standalone GPU inference service | yes | yes | **model verified on T4 in Colab; not yet serving through Prism** |
-| Frontend (`apps/web`) | no — the frontend's scope | — | — |
+| Frontend (`apps/web`) | yes | no browser suite; typecheck/build pass | **yes against local API; not deployed** |
 
 ## Test results (actually executed)
 
