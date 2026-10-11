@@ -258,3 +258,122 @@ no credential.
    depends on it.
 
 **Neither path is operational until §5 passes against the public hostname.**
+
+---
+
+## 9. Replicas created then deleted, never running
+
+Symptom: a managed deployment repeatedly creates and destroys replicas,
+events read **"Deleting non running replica during scale down"**, and the logs
+show machine allocation and setup but no confirmed service execution.
+
+The same service works in a Studio. That difference is the diagnosis: a Studio
+never probes the service and inherits your shell environment; a managed
+deployment does neither.
+
+### Two facts about this service that explain it
+
+1. **`serve.py` exits `2` *before* uvicorn starts if `INFERENCE_API_KEY` is
+   absent** (`serve.py` lines 39–43). The process is gone in under a second, so
+   there is nothing to probe and nothing that looks like a crash in the logs.
+   **Studio environment variables are NOT inherited by a managed deployment.**
+2. **`PRELOAD=1` loads the model *before* the server starts serving.** In
+   `natlas_inference/app.py` the lifespan hook calls `ENGINE.load()` **before
+   `yield`**, and uvicorn does not accept connections until the lifespan
+   yields. So `/health` is **unreachable for the entire load** — minutes on a
+   T4 at 4-bit NF4, far longer on a cold cache that must pull ~16 GB. A
+   readiness probe with a 30–120 s grace kills the replica mid-load, every
+   time, forever.
+
+### What is NOT the cause
+
+**GPU sizing is not the cause of a replica that never runs.** A preload failure
+is *caught* (`app.py` lines 109–111): the service starts anyway so `/health`
+can report `model_loaded: false` honestly. A GPU-less or undersized machine
+therefore produces a **running** replica with a truthful health body — not a
+replica that disappears. If replicas vanish, look at the two facts above, plus
+a failed `import natlas_inference`.
+
+### Ranked causes and the exact check for each
+
+| # | Cause | Check | Fix |
+|---|---|---|---|
+| 1 | Readiness probe fires during model load | Does the replica die after a fixed interval, always at the same age? | Raise startup grace to **≥ 900 s**, or set `PRELOAD=0` (below) |
+| 2 | `INFERENCE_API_KEY` not set as a *deployment* secret | `grep "INFERENCE_API_KEY is not set" <logs>`; exit code `2` | Add it as a deployment secret, not a Studio variable |
+| 3 | `natlas_inference` not importable / wrong workdir | `grep "cannot import natlas_inference" <logs>` | `pip install -e .` in the deployment env, or set workdir to the folder holding `natlas_inference/` |
+| 4 | No persistent cache → ~16 GB re-download per replica | Does each replica re-download weights? | Mount a volume and point `HF_HOME` at it |
+| 5 | `HF_TOKEN` missing (gated model) | `grep "HF_TOKEN" <logs>` | Add as a deployment secret |
+
+`run_lightning.sh` now prints each of these as a `[preflight]` line and exits
+`2` with the reason, so the logs name the cause instead of going quiet.
+
+### Minimal corrective configuration
+
+| Setting | Value | Why |
+|---|---|---|
+| Port | `8000` | What the service binds |
+| Health/readiness path | `/health` | Liveness only; never proof of inference |
+| **Startup grace / initial delay** | **≥ 900 s** | The single most important setting. Must exceed model load. |
+| Readiness timeout / interval | `10 s` / `30 s` | Generous; `/health` is cheap once serving |
+| Secrets | `INFERENCE_API_KEY`, `HF_TOKEN` | Deployment-level, **not** Studio variables |
+| `HF_HOME` | a mounted persistent path (`/cache/huggingface` in the container) | Stops the re-download loop |
+| GPU | 1 × T4 or better | ~6 GiB VRAM at 4-bit NF4 |
+| Replicas | **1**, min 1 | Generation is serialised by design; a second replica doubles VRAM for no throughput |
+| Scale to zero | **off** | A cold start re-loads an 8B model |
+| `PRELOAD` | `1` if grace ≥ 900 s, else `0` | See below |
+
+### If the platform caps the startup grace: `PRELOAD=0`
+
+```
+PRELOAD=0
+```
+
+No code change. The server binds immediately, `/health` answers at once with
+`model_loaded: false`, the probe passes, and the model loads on the **first
+inference request** (`TransformersEngine.generate` calls `load()` when not
+loaded, and `load()` is a no-op afterwards — so the model still becomes
+resident and stays resident, exactly as required).
+
+The cost is that the first request is slow. **Warm it up yourself before
+pointing Prism at the host**, because Prism's `NATLAS_TIMEOUT_MS` is 120 s and
+a cold load exceeds it:
+
+```bash
+curl -sS --max-time 1800 -X POST "$BASE/v1/chat/completions" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"model":"NCAIR1/N-ATLaS","messages":[{"role":"user","content":"warm up"}],"max_tokens":8}'
+```
+
+Then confirm `/health` reports `"model_loaded": true` before any Prism call.
+
+### Verification procedure
+
+Run in order. **Do not call the endpoint operational until step 5 passes.**
+
+```bash
+BASE="https://<deployment-host>"; KEY="<INFERENCE_API_KEY>"
+
+# 1. The replica is actually serving (not merely allocated)
+curl -sS -m 30 "$BASE/health"
+
+# 2. Auth is enforced -- MUST print exactly 401
+curl -sS -o /dev/null -w "%{http_code}\n" -m 30 "$BASE/v1/models"
+
+# 3. Authenticated discovery
+curl -sS -m 30 -H "Authorization: Bearer $KEY" "$BASE/v1/models"
+
+# 4. The model is resident
+curl -sS -m 30 "$BASE/health"      # expect "model_loaded": true
+
+# 5. A real generation, timestamped -- THIS is the evidence
+date -u +%Y-%m-%dT%H:%M:%SZ
+curl -sS --max-time 300 -X POST "$BASE/v1/chat/completions" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"model":"NCAIR1/N-ATLaS","messages":[{"role":"user","content":"Sannu! Menene babban birnin Najeriya?"}],"language":"ha","max_tokens":64}'
+```
+
+Step 2 returning `401` matters as much as step 5 succeeding: it is the evidence
+that a public GPU endpoint is not an open proxy.
+
+Then, and only then, repoint Prism (§6) and get `verified: true` through
+Prism itself. A green `/health` is not an integration.
