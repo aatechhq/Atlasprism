@@ -39,7 +39,8 @@ def current_user(
         email = str(payload.get("email") or "").strip().lower()
         if not email:
             raise Unauthorized("Token does not include an email address.")
-        if payload.get("email_verified") is False:
+        email_verified = payload.get("email_verified", payload.get("emailVerified"))
+        if email_verified is False:
             raise Unauthorized("Verify your email address before continuing.")
         subject = str(payload["sub"])
         user = db.scalar(select(User).where(User.auth_subject == subject))

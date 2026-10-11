@@ -18,7 +18,13 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const refresh = useCallback(async () => {
     setLoading(true); setError(null);
     try { const data = await api<Project[]>("/projects"); setProjects(data); setProjectIdState(current => current && data.some(p => p.id === current) ? current : (localStorage.getItem("prism_project") && data.some(p => p.id === localStorage.getItem("prism_project")) ? localStorage.getItem("prism_project")! : data[0]?.id ?? "")); }
-    catch (e) { if ((e as {status?:number}).status === 401) { router.replace("/login"); } else setError((e as Error).message); }
+    catch (e) {
+      if ((e as { status?: number }).status === 401) {
+        const session = await authClient.getSession();
+        if (!session.data) router.replace("/login");
+        else setError((e as Error).message);
+      } else setError((e as Error).message);
+    }
     finally { setLoading(false); }
   }, [router]);
   useEffect(() => { void refresh(); }, [refresh]);

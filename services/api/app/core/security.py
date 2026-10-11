@@ -83,7 +83,13 @@ def decode_neon_token(token: str) -> dict[str, Any] | None:
         else:
             options["verify_iss"] = False
         if settings.neon_auth_audience:
-            kwargs["audience"] = settings.neon_auth_audience
+            # Neon anonymous tokens use the instance origin as `aud`, while
+            # authenticated Better Auth JWTs can use the full Auth URL. Both
+            # are issued by this same verified JWKS/issuer and must be accepted.
+            kwargs["audience"] = list({
+                settings.neon_auth_audience.rstrip("/"),
+                settings.neon_auth_issuer.rstrip("/"),
+            })
         else:
             options["verify_aud"] = False
         return jwt.decode(
