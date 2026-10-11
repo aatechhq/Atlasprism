@@ -36,7 +36,13 @@ primary_region = "iad"
   # claims, not credentials; the signing keys remain with Neon.
   AUTH_MODE = "neon"
   NEON_AUTH_JWKS_URL = "https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech/neondb/auth/.well-known/jwks.json"
-  NEON_AUTH_ISSUER = "https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech/neondb/auth"
+  # MUST equal the `iss` claim Neon actually puts in the token, which is the
+  # bare origin -- NOT the auth base URL with /neondb/auth. Verified
+  # 2026-10-11 by decoding a real token from /api/auth/token:
+  #   iss = https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech
+  # With the /neondb/auth suffix PyJWT raises InvalidIssuerError, so every
+  # signed-in request got 401 "Invalid or expired token."
+  NEON_AUTH_ISSUER = "https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech"
   NEON_AUTH_AUDIENCE = "https://ep-round-queen-b51gksll.neonauth.c-7.us-east-2.aws.neon.tech"
 
   # A T4 generation measures ~8s and a cold first call is slower; 120s is the
