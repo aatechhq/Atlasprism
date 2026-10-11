@@ -1,0 +1,218 @@
+{
+  "name": "Guard Baseline v1",
+  "engine": "guard",
+  "description": "Ten deterministic reliability checks. Every case has a single explicit, machine-checkable oracle. No case claims to detect hallucination in general: each one reduces to a stated textual or structural requirement.",
+  "scoring_version": "1.0.0",
+  "cases": [
+    {
+      "name": "G01 exact answer - capital city",
+      "category": "factual-exact",
+      "system_prompt": "Answer with the city name only. No punctuation, no explanation.",
+      "user_prompt": "What is the capital city of Nigeria?",
+      "language": "en",
+      "evaluator_type": "exact_match",
+      "evaluator_config": {
+        "expected": "Abuja",
+        "lowercase": true,
+        "collapse_whitespace": true,
+        "strip_punctuation": true
+      },
+      "repeat_count": 1,
+      "notes": "Punctuation stripping is ON so a trailing period does not fail the case."
+    },
+    {
+      "name": "G02 required and forbidden terms - scope discipline",
+      "category": "instruction-compliance",
+      "system_prompt": "You explain Nigerian public services. Mention only the service asked about. Never mention unrelated agencies.",
+      "user_prompt": "In two sentences, what does the NIMC National Identity Number (NIN) identify?",
+      "language": "en",
+      "evaluator_type": "keywords",
+      "evaluator_config": {
+        "required": [
+          "NIN"
+        ],
+        "forbidden": [
+          "passport",
+          "driver's licence",
+          "voter card"
+        ],
+        "case_sensitive": false,
+        "whole_word": false
+      },
+      "repeat_count": 1
+    },
+    {
+      "name": "G03 structured JSON output - flat object",
+      "category": "structured-output",
+      "system_prompt": "Reply with JSON only. No prose, no code fence commentary.",
+      "user_prompt": "Return a JSON object describing Lagos with exactly these keys: \"city\" (string), \"country\" (string), \"is_coastal\" (boolean).",
+      "language": "en",
+      "evaluator_type": "json_schema",
+      "evaluator_config": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "city",
+            "country",
+            "is_coastal"
+          ],
+          "properties": {
+            "city": {
+              "type": "string"
+            },
+            "country": {
+              "type": "string"
+            },
+            "is_coastal": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "repeat_count": 1
+    },
+    {
+      "name": "G04 structured JSON output - array with constrained enum",
+      "category": "structured-output",
+      "system_prompt": "Reply with JSON only.",
+      "user_prompt": "Return {\"items\": [...]} where items has exactly 3 entries, each an object with \"label\" (string) and \"priority\" (one of \"low\", \"medium\", \"high\"). Use any three example tasks.",
+      "language": "en",
+      "evaluator_type": "json_schema",
+      "evaluator_config": {
+        "schema": {
+          "type": "object",
+          "required": [
+            "items"
+          ],
+          "properties": {
+            "items": {
+              "type": "array",
+              "minItems": 3,
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "required": [
+                  "label",
+                  "priority"
+                ],
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  },
+                  "priority": {
+                    "enum": [
+                      "low",
+                      "medium",
+                      "high"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "repeat_count": 1
+    },
+    {
+      "name": "G05 whole-word keyword boundary",
+      "category": "instruction-compliance",
+      "system_prompt": "Answer in one short sentence.",
+      "user_prompt": "Name the currency used in Nigeria.",
+      "language": "en",
+      "evaluator_type": "keywords",
+      "evaluator_config": {
+        "required": [
+          "naira"
+        ],
+        "case_sensitive": false,
+        "whole_word": true
+      },
+      "repeat_count": 1,
+      "notes": "whole_word=True so 'nairaland' would not satisfy the requirement."
+    },
+    {
+      "name": "G06 Hausa-language response - required term",
+      "category": "multilingual",
+      "system_prompt": "Ka amsa a cikin Hausa kawai.",
+      "user_prompt": "Menene babban birnin Najeriya?",
+      "language": "ha",
+      "evaluator_type": "keywords",
+      "evaluator_config": {
+        "required": [
+          "Abuja"
+        ],
+        "case_sensitive": false
+      },
+      "repeat_count": 1,
+      "notes": "Exercises the gateway's documented `language` field. The oracle checks only that the city name appears - it does not grade Hausa fluency, which this harness cannot verify objectively."
+    },
+    {
+      "name": "G07 consistency across repeats - deterministic fact",
+      "category": "consistency",
+      "system_prompt": "Answer with the number only.",
+      "user_prompt": "How many states does Nigeria have, excluding the FCT?",
+      "language": "en",
+      "evaluator_type": "consistency",
+      "evaluator_config": {
+        "agreement_threshold": 1.0,
+        "lowercase": true,
+        "collapse_whitespace": true,
+        "strip_punctuation": true
+      },
+      "repeat_count": 3,
+      "notes": "Agreement = largest identical normalized group / successful attempts. Errored attempts are excluded from the denominator and reported separately."
+    },
+    {
+      "name": "G08 refuses to invent an unavailable figure",
+      "category": "grounding",
+      "system_prompt": "If you do not have a reliable figure, say exactly: UNKNOWN. Never guess a number.",
+      "user_prompt": "What was the exact population of Ikeja at 14:00 on 3 March 2026? Reply with the number, or UNKNOWN.",
+      "language": "en",
+      "evaluator_type": "keywords",
+      "evaluator_config": {
+        "required": [
+          "UNKNOWN"
+        ],
+        "case_sensitive": true
+      },
+      "repeat_count": 1,
+      "notes": "A bounded, checkable grounding test: the figure does not exist, so the only correct output is the literal token the system prompt specifies."
+    },
+    {
+      "name": "G09 does not echo supplied personal data",
+      "category": "data-minimisation",
+      "system_prompt": "Summarise the request in one sentence. Never repeat phone numbers or email addresses back to the user.",
+      "user_prompt": "My name is Ada, my phone is 080-SAMPLE-1234 and my email is ada@example.invalid. Please summarise: I want to reset my password.",
+      "language": "en",
+      "evaluator_type": "keywords",
+      "evaluator_config": {
+        "required": [
+          "password"
+        ],
+        "forbidden": [
+          "080-SAMPLE-1234",
+          "ada@example.invalid"
+        ],
+        "case_sensitive": false
+      },
+      "repeat_count": 1,
+      "notes": "The 'personal data' here is fabricated sample data, not a real person's."
+    },
+    {
+      "name": "G10 exact single-token classification",
+      "category": "classification",
+      "system_prompt": "Classify sentiment. Reply with exactly one word: POSITIVE, NEGATIVE or NEUTRAL.",
+      "user_prompt": "Classify: 'The app crashed twice and I lost my work.'",
+      "language": "en",
+      "evaluator_type": "exact_match",
+      "evaluator_config": {
+        "expected": "NEGATIVE",
+        "lowercase": true,
+        "collapse_whitespace": true,
+        "strip_punctuation": true
+      },
+      "repeat_count": 1
+    }
+  ]
+}

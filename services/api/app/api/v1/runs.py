@@ -1,0 +1,202 @@
+"""Run launch, status, results, traces, metrics, reports."""
+from __future__ import annotations
+
+import asyncio
+import datetime as dt
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from app.api.deps import current_user, owned_connection, owned_project, owned_run
+from app.connectors.natlas import NatlasConnector
+from app.core.errors import BadRequest
+from app.db.session import get_db
+from app.engines.pulse import metrics as pulse
+from app.evaluation import runner as run_engine
+from app.models import InferenceTrace, ModelConnection, ReportExport, RunCase, TestRun, TestSuite, User
+from app.reporting.exporter import build_csv, build_report
+from app.schemas.api import (
+    PaginatedRunCases, RunCaseOut, RunCreate, RunCreateResponse, RunOut, TraceOut,
+)
+
+router = APIRouter(tags=["runs"])
+
+
+def _run_out(run: TestRun) -> RunOut:
+    out = RunOut.model_validate(run)
+    out.pass_rate = run_engine.pass_rate(run.passed_count, run.failed_count)
+    return out
+
+
+@router.post("/runs", response_model=RunCreateResponse, status_code=202)
+def create_run(
+    body: RunCreate,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> RunCreateResponse:
+    """Persist the run, return its id immediately, then execute in background.
+
+    Durability is limited by design (see runner docstring): execution is an
+    in-process background task, not a durable queue.
+    """
+    owned_project(body.project_id, db, user)
+    conn = owned_connection(body.connection_id, db, user)
+    if conn.project_id != body.project_id:
+        raise BadRequest("Connection does not belong to that project.")
+
+    suites = list(db.scalars(
+        select(TestSuite).where(
+            TestSuite.id.in_(body.suite_ids), TestSuite.project_id == body.project_id
+        )
+    ).all())
+    found = {s.id for s in suites}
+    missing = [str(s) for s in body.suite_ids if s not in found]
+    if missing:
+        raise BadRequest("One or more suites not found in this project.", missing_suite_ids=missing)
+
+    try:
+        run = run_engine.create_run(
+            db, project_id=body.project_id, connection=conn,
+            suites=suites, max_concurrency=body.max_concurrency,
+        )
+    except ValueError as exc:
+        raise BadRequest(str(exc))
+
+    connector = NatlasConnector(base_url=conn.endpoint, model_id=conn.model_id)
+    background.add_task(run_engine.execute_run, run.id, connector)
+    return RunCreateResponse(run_id=run.id, status=run.status, total_cases=run.total_cases)
+
+
+@router.get("/runs", response_model=list[RunOut])
+def list_runs(
+    project_id: uuid.UUID = Query(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> list[RunOut]:
+    owned_project(project_id, db, user)
+    rows = db.scalars(
+        select(TestRun).where(TestRun.project_id == project_id)
+        .order_by(TestRun.created_at.desc()).limit(100)
+    ).all()
+    return [_run_out(r) for r in rows]
+
+
+@router.get("/runs/{run_id}", response_model=RunOut)
+def get_run(
+    run_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> RunOut:
+    return _run_out(owned_run(run_id, db, user))
+
+
+@router.get("/runs/{run_id}/results", response_model=PaginatedRunCases)
+def run_results(
+    run_id: uuid.UUID,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    state: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> PaginatedRunCases:
+    run = owned_run(run_id, db, user)
+    q = select(RunCase).where(RunCase.run_id == run.id)
+    if state:
+        q = q.where(RunCase.state == state)
+    total = db.scalar(select(func.count()).select_from(q.subquery())) or 0
+    rows = list(db.scalars(q.order_by(RunCase.created_at).limit(limit).offset(offset)).all())
+
+    traces: dict[uuid.UUID, list[InferenceTrace]] = {}
+    if rows:
+        for t in db.scalars(
+            select(InferenceTrace).where(InferenceTrace.run_case_id.in_([r.id for r in rows]))
+        ).all():
+            traces.setdefault(t.run_case_id, []).append(t)
+
+    items = []
+    for rc in rows:
+        snap = rc.case_snapshot or {}
+        items.append(RunCaseOut(
+            run_case_id=rc.id, name=snap.get("name"), engine=snap.get("engine"),
+            category=snap.get("category"), severity=snap.get("severity"),
+            state=rc.state, passed=rc.passed, explanation=rc.explanation,
+            error=rc.error, error_kind=rc.error_kind,
+            score_metadata=rc.score_metadata or {}, case_snapshot=snap,
+            traces=[
+                TraceOut(
+                    trace_id=t.id, attempt=t.attempt, outcome=t.outcome,
+                    upstream_status=t.upstream_status, latency_ms=t.latency_ms,
+                    model_id=t.model_id, response_text=t.response_text,
+                    error_message=t.error_message, recorded_at=t.created_at,
+                )
+                for t in sorted(traces.get(rc.id, []), key=lambda x: x.attempt)
+            ],
+        ))
+    return PaginatedRunCases(run_id=run.id, total=total, limit=limit, offset=offset, items=items)
+
+
+@router.get("/traces")
+def list_traces(
+    project_id: uuid.UUID = Query(...),
+    run_id: uuid.UUID | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    owned_project(project_id, db, user)
+    if run_id is not None:
+        owned_run(run_id, db, user)
+    return pulse.recent_traces(db, project_id=project_id, run_id=run_id, limit=limit, offset=offset)
+
+
+@router.get("/metrics/summary")
+def metrics_summary(
+    project_id: uuid.UUID = Query(...),
+    run_id: uuid.UUID | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    owned_project(project_id, db, user)
+    if run_id is not None:
+        owned_run(run_id, db, user)
+    return pulse.summary(db, project_id=project_id, run_id=run_id)
+
+
+@router.get("/reports/{run_id}")
+def report(
+    run_id: uuid.UUID, db: Session = Depends(get_db), user: User = Depends(current_user)
+) -> dict:
+    return build_report(db, owned_run(run_id, db, user))
+
+
+@router.get("/reports/{run_id}/export")
+def export_report(
+    run_id: uuid.UUID,
+    format: str = Query(default="json", pattern="^(json|csv)$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> Response:
+    run = owned_run(run_id, db, user)
+    data = build_report(db, run)
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    db.add(ReportExport(
+        run_id=run.id, kind=format,
+        generation_metadata={"generated_at": stamp, "case_count": len(data["cases"])},
+    ))
+    db.commit()
+    name = f"atlas-prism-run-{run.id}-{stamp}.{format}"
+    if format == "csv":
+        return Response(
+            content=build_csv(data).encode("utf-8-sig"),
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
+    import json
+
+    return Response(
+        content=json.dumps(data, indent=2, default=str),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
