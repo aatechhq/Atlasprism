@@ -1,17 +1,16 @@
 "use client";
 
-import { NeonAuthUIProvider } from "@neondatabase/auth/react/ui";
+import { AuthUIProvider } from "@neondatabase/auth/react/ui";
 import { authClient } from "@/lib/auth/client";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
-    <NeonAuthUIProvider
+    <AuthUIProvider
       authClient={authClient}
       redirectTo="/dashboard"
       social={{ providers: ["google"] }}
-      defaultTheme="dark"
     >
       {children}
-    </NeonAuthUIProvider>
+    </AuthUIProvider>
   );
 }
