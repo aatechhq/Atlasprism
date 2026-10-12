@@ -1,6 +1,17 @@
-export type Project = { id: string; name: string; description: string | null; app_system_prompt: string | null; gate_min_pass_rate: number | null; gate_max_critical_findings: number | null; owner_id: string; created_at: string };
+export type Project = { id: string; name: string; description: string | null; organization_id: string | null; app_system_prompt: string | null; gate_min_pass_rate: number | null; gate_max_critical_findings: number | null; owner_id: string; created_at: string };
 export type Connection = { id: string; project_id: string; provider: string; endpoint: string; model_id: string; verification_state: string; verification_detail: string | null; verified_at: string | null; created_at: string; credential: string };
 export type VerifyResult = { connection_id: string; verified: boolean; state: string; detail: string; outcome: string; model_id: string | null; latency_ms: number | null; upstream_status: number | null; response_excerpt: string | null; checked_at: string };
+export type HostVerification = { id: string; project_id: string; host: string; method: "dns_txt" | "https_file" | null; verified_at: string | null; last_error: string | null; created_at: string };
+export type HostVerificationInstructions = {
+  id: string;
+  host: string;
+  verified: boolean;
+  methods: {
+    dns_txt: { record_name: string; record_type: "TXT"; record_value: string; note: string };
+    https_file: { url: string; contents: string; note: string };
+  };
+  why: string;
+};
 export type Suite = { id: string; project_id: string; name: string; engine: "guard" | "shield"; version: number; description: string | null; created_at: string; case_count: number };
 export type TestCase = { id: string; suite_id: string; name: string; user_prompt: string; system_prompt: string | null; language: string; category: string | null; evaluator_type: string; evaluator_config: Record<string, unknown>; severity: string | null; severity_rationale: string | null; repeat_count: number; version: number };
 export type SuiteDetail = Suite & { cases: TestCase[] };
@@ -26,3 +37,33 @@ export type ReleaseGate = {
   limitations: string[];
   notes: string | null;
 };
+
+export type ComparisonSide = { state: string; passed: boolean | null; repeat_count: number; explanation: string | null };
+export type ComparisonCase = {
+  case: string;
+  engine: string;
+  severity: string | null;
+  verdict: "regressed" | "fixed" | "still_passing" | "still_failing" | "inconclusive" | "added" | "removed" | "not_in_this_run";
+  low_confidence: boolean;
+  baseline: ComparisonSide | null;
+  current: ComparisonSide | null;
+};
+export type RunComparison = {
+  baseline: { id: string; pass_rate: number | null; passed: number; failed: number; errors: number };
+  current: { id: string; pass_rate: number | null; passed: number; failed: number; errors: number };
+  pass_rate_delta: number | null;
+  summary: Record<string, number>;
+  low_confidence_changes: number;
+  cases: ComparisonCase[];
+  interpretation: { model_changed?: boolean; scoring_changed?: boolean; [key: string]: unknown };
+};
+export type Finding = { run_case_id: string; case: string; engine: string; state: string; category: string | null; severity: string | null; rule_id: string | null; evidence: string; mitigation: string | null; severity_rationale: string | null };
+export type Findings = { total: number; by_severity: Record<string, number>; findings: Finding[]; note: string };
+export type LanguageMetric = { language: string; cases: number; passed: number; failed: number; errors: number; scored_cases: number; pass_rate: number | null; latency_ms: { sample_count: number; median: number | null; p95: number | null } };
+export type LanguageMetrics = { languages: LanguageMetric[]; pass_rate_definition: string; latency_population: string; note: string };
+
+export type Organization = { id: string; name: string; created_at: string; role: "owner" | "admin" | "member" | "viewer" | null; member_count: number | null };
+export type OrganizationMember = { user_id: string; email: string; role: "owner" | "admin" | "member" | "viewer"; created_at: string };
+export type DatasetVersion = { id: string; version: number; notes: string | null; case_count: number; created_at: string };
+export type Dataset = { id: string; name: string; engine: "guard" | "shield"; description: string | null; owner_id: string; organization_id: string | null; created_at: string; latest_version: number | null; versions: DatasetVersion[] };
+export type DatasetVersionDetail = { dataset_id: string; name: string; engine: "guard" | "shield"; version: number; notes: string | null; case_count: number; cases: Record<string, unknown>[] };

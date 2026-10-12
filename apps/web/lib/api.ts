@@ -35,6 +35,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       const body = await response.json().catch(() => ({}));
       throw new ApiError(response.status, errorMessage(body, response.status));
     }
+    if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   } catch (error) {
     if (error instanceof ApiError) throw error;

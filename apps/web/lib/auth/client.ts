@@ -18,14 +18,19 @@ function readToken(result: unknown): string | null {
 }
 
 async function fetchToken(): Promise<string | null> {
-  const token = readToken(await authClient.$fetch<{ token: string }>("/token"));
+  const requestToken = async () => {
+    const response = await fetch("/api/auth/token", { credentials: "include", cache: "no-store" });
+    if (!response.ok) return null;
+    return readToken(await response.json().catch(() => null));
+  };
+  const token = await requestToken();
   if (token) return token;
   // The browser's `local.session_data` cookie lives only 300s. Once it lapses
   // the token call comes back empty, so refresh the session and ask again
   // before giving up and sending an unauthenticated request.
   const session = await authClient.getSession();
   if (!session?.data) return null;
-  return readToken(await authClient.$fetch<{ token: string }>("/token"));
+  return requestToken();
 }
 
 /** Expiry of a JWT, in ms. Falls back to a short window if it cannot be read. */

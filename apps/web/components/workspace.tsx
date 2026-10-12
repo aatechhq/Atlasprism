@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { Activity, BarChart3, BookOpenCheck, Boxes, FileDown, FolderKanban, LogOut, Menu, Play, ShieldCheck, X } from "lucide-react";
+import { Activity, BarChart3, BookOpenCheck, Boxes, FileDown, FolderKanban, LibraryBig, LogOut, Menu, Play, ShieldCheck, X } from "lucide-react";
 import { api } from "@/lib/api";
 import { authClient } from "@/lib/auth/client";
 import type { Project } from "@/lib/types";
@@ -34,7 +34,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 }
 
 const nav = [
-  ["/dashboard", "Overview", BarChart3], ["/projects", "Projects", FolderKanban], ["/suites", "Test Suites", Boxes], ["/runs", "Run Evaluation", Play], ["/results", "Results", BookOpenCheck], ["/pulse", "Pulse", Activity], ["/reports", "Reports", FileDown],
+  ["/dashboard", "Overview", BarChart3], ["/projects", "Projects", FolderKanban], ["/suites", "Test Suites", Boxes], ["/library", "Library & Team", LibraryBig], ["/runs", "Run Evaluation", Play], ["/results", "Results", BookOpenCheck], ["/pulse", "Pulse", Activity], ["/reports", "Reports", FileDown],
 ] as const;
 
 export function AppShell({ children }: { children: React.ReactNode }) {
