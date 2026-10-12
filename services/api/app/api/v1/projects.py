@@ -41,6 +41,8 @@ def create_project(
         name=body.name.strip(),
         description=body.description,
         app_system_prompt=(body.app_system_prompt or "").strip() or None,
+        gate_min_pass_rate=body.gate_min_pass_rate,
+        gate_max_critical_findings=body.gate_max_critical_findings,
     )
     db.add(project)
     db.commit()
@@ -78,6 +80,10 @@ def update_project(
         project.description = data["description"]
     if "app_system_prompt" in data:
         project.app_system_prompt = (data["app_system_prompt"] or "").strip() or None
+    if "gate_min_pass_rate" in data:
+        project.gate_min_pass_rate = data["gate_min_pass_rate"]
+    if "gate_max_critical_findings" in data:
+        project.gate_max_critical_findings = data["gate_max_critical_findings"]
     db.commit()
     db.refresh(project)
     return project

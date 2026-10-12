@@ -39,6 +39,9 @@ class ProjectCreate(BaseModel):
     # rather than the base model. Optional -- leave empty to evaluate the model
     # directly.
     app_system_prompt: str | None = Field(default=None, max_length=20000)
+    # Release thresholds (blueprint workflow 5). Optional; unset means no gate.
+    gate_min_pass_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    gate_max_critical_findings: int | None = Field(default=None, ge=0)
 
 
 class ProjectUpdate(BaseModel):
@@ -47,6 +50,8 @@ class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
     app_system_prompt: str | None = Field(default=None, max_length=20000)
+    gate_min_pass_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    gate_max_critical_findings: int | None = Field(default=None, ge=0)
 
 
 class ProjectOut(ORMModel):
@@ -54,6 +59,8 @@ class ProjectOut(ORMModel):
     name: str
     description: str | None
     app_system_prompt: str | None
+    gate_min_pass_rate: float | None
+    gate_max_critical_findings: int | None
     owner_id: uuid.UUID
     created_at: dt.datetime
 

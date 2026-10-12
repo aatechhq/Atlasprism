@@ -113,3 +113,72 @@ def recent_traces(db: Session, *, project_id: uuid.UUID, run_id: uuid.UUID | Non
             for t in rows
         ],
     }
+
+
+def by_language(db: Session, *, project_id: uuid.UUID,
+                run_id: uuid.UUID | None = None) -> dict[str, Any]:
+    """Quality and latency grouped by the language each case declared.
+
+    An application can be healthy in English and degrade in Hausa or Yoruba
+    while the aggregate looks fine, so the aggregate alone is not enough for a
+    multilingual product. Computed from persisted run cases and their traces.
+
+    The same two rules as everywhere else: errors are counted separately and
+    excluded from the pass rate, and latency is measured over successful
+    attempts only.
+    """
+    cases_q = (
+        select(RunCase)
+        .join(TestRun, RunCase.run_id == TestRun.id)
+        .where(TestRun.project_id == project_id)
+    )
+    if run_id is not None:
+        cases_q = cases_q.where(RunCase.run_id == run_id)
+    cases = list(db.scalars(cases_q).all())
+
+    buckets: dict[str, dict[str, Any]] = {}
+    for rc in cases:
+        lang = ((rc.case_snapshot or {}).get("language") or "unspecified").lower()
+        b = buckets.setdefault(lang, {
+            "language": lang, "cases": 0, "passed": 0, "failed": 0,
+            "errors": 0, "_latencies": [],
+        })
+        b["cases"] += 1
+        if rc.state == "passed":
+            b["passed"] += 1
+        elif rc.state == "failed":
+            b["failed"] += 1
+        elif rc.state == "error":
+            b["errors"] += 1
+        for tr in rc.traces:
+            if tr.outcome == "ok" and tr.latency_ms is not None:
+                b["_latencies"].append(tr.latency_ms)
+
+    languages = []
+    for b in buckets.values():
+        lat = sorted(b.pop("_latencies"))
+        scored = b["passed"] + b["failed"]
+        languages.append({
+            **b,
+            "scored_cases": scored,
+            "pass_rate": round(b["passed"] / scored, 4) if scored else None,
+            "latency_ms": {
+                "sample_count": len(lat),
+                "median": int(statistics.median(lat)) if lat else None,
+                "p95": _percentile(lat, 0.95),
+            },
+        })
+    languages.sort(key=lambda x: (-x["cases"], x["language"]))
+
+    return {
+        "scope": {"project_id": str(project_id), "run_id": str(run_id) if run_id else None},
+        "languages": languages,
+        "pass_rate_definition": "passed / (passed + failed); errored cases excluded",
+        "latency_population": "successful inference attempts only",
+        "data_source": "computed from run_cases and inference_traces rows; no synthetic data",
+        "note": (
+            "Language is the value each test case declared, not detected from "
+            "the response. A low count in one language means few cases were "
+            "written for it, not that the application handles it well."
+        ),
+    }

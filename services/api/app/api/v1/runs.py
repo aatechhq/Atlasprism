@@ -15,7 +15,9 @@ from app.core.errors import BadRequest
 from app.db.session import get_db
 from app.engines.pulse import metrics as pulse
 from app.evaluation import runner as run_engine
+from app.evaluation import gate
 from app.evaluation.comparison import compare_runs, non_passing_case_ids
+from app.reporting.exporter import _mask as mask, _seeded_literals as seeded_literals
 from app.models import InferenceTrace, ModelConnection, ReportExport, RunCase, TestRun, TestSuite, User
 from app.reporting.exporter import build_csv, build_report
 from app.schemas.api import (
@@ -144,6 +146,93 @@ def retest_run(
     connector = NatlasConnector(base_url=conn.endpoint, model_id=conn.model_id)
     background.add_task(run_engine.execute_run, run.id, connector)
     return RunCreateResponse(run_id=run.id, status=run.status, total_cases=run.total_cases)
+
+
+@router.get("/runs/{run_id}/gate")
+def run_gate(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """Go / no-go for this run against the project's declared thresholds.
+
+    With no thresholds configured the verdict is `not_configured` rather than a
+    quiet pass, and a run with no scored evidence is `inconclusive`. The
+    thresholds applied are returned alongside the decision, so this doubles as
+    the approval record for an archived release.
+    """
+    run = owned_run(run_id, db, user)
+    project = owned_project(run.project_id, db, user)
+    return gate.evaluate(db, run=run, project=project)
+
+
+@router.get("/runs/{run_id}/findings")
+def run_findings(
+    run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """Shield findings for this run, with severity, rationale and mitigation.
+
+    Seeded Shield literals are redacted with the same masking the exporter
+    uses: a findings view that printed the planted secret would publish the
+    string the test exists to detect.
+    """
+    run = owned_run(run_id, db, user)
+    rows = db.scalars(
+        select(RunCase).where(RunCase.run_id == run.id).order_by(RunCase.created_at)
+    ).all()
+    out: list[dict] = []
+    by_severity: dict[str, int] = {}
+    for rc in rows:
+        if not rc.findings:
+            continue
+        seeds = seeded_literals(rc.case_snapshot or {})
+        for f in rc.findings:
+            sev = (f.severity or "unspecified").lower()
+            by_severity[sev] = by_severity.get(sev, 0) + 1
+            out.append({
+                "run_case_id": str(rc.id),
+                "case": (rc.case_snapshot or {}).get("name"),
+                "engine": (rc.case_snapshot or {}).get("engine"),
+                "state": rc.state,
+                "category": f.category,
+                "severity": f.severity,
+                "rule_id": f.rule_id,
+                "evidence": mask(f.evidence, seeds),
+                "mitigation": f.mitigation,
+                "severity_rationale": f.severity_rationale,
+            })
+    return {
+        "run_id": str(run.id),
+        "total": len(out),
+        "by_severity": by_severity,
+        "findings": out,
+        "note": (
+            "A finding is a reproducible test outcome against a pre-declared "
+            "rule, not a proof of exploitability in production. Seeded secret "
+            "literals are redacted."
+        ),
+    }
+
+
+@router.get("/metrics/languages")
+def metrics_languages(
+    project_id: uuid.UUID = Query(...),
+    run_id: uuid.UUID | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """Quality and latency per language.
+
+    The differentiator in the product blueprint: a Nigerian-language
+    application can degrade in one language while the aggregate looks healthy.
+    Computed from persisted run cases and traces; no synthetic data.
+    """
+    owned_project(project_id, db, user)
+    if run_id is not None:
+        owned_run(run_id, db, user)
+    return pulse.by_language(db, project_id=project_id, run_id=run_id)
 
 
 @router.get("/runs", response_model=list[RunOut])

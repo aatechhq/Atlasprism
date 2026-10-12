@@ -12,7 +12,7 @@ import datetime as dt
 import uuid
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, func,
+    Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, func,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -66,6 +66,11 @@ class Project(Base):
     # Nullable and empty by default: an empty profile changes nothing, so
     # existing suites and historical runs behave exactly as before.
     app_system_prompt: Mapped[str | None] = mapped_column(Text)
+    # Release thresholds, declared before a run so an approval record can say
+    # which standard was applied. Both nullable: with neither set, the gate
+    # reports `not_configured` rather than a quiet pass.
+    gate_min_pass_rate: Mapped[float | None] = mapped_column(Float)
+    gate_max_critical_findings: Mapped[int | None] = mapped_column(Integer)
     created_at: Mapped[dt.datetime] = _created()
     updated_at: Mapped[dt.datetime] = _updated()
 
