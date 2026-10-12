@@ -31,10 +31,32 @@
 **Why the inference service is separate.** The Prism backend has no ML
 dependencies — no torch, no transformers, no Hugging Face client. Model
 loading, quantization and HF authentication live in `services/inference`, which
-runs on GPU hardware (Colab T4 initially, dedicated GPU hosting for the judging
-period). Prism reaches it over HTTP at `NATLAS_BASE_URL`. Moving the model
+runs on GPU hardware — a **Lightning AI managed deployment (Tesla T4, 4-bit
+NF4)** for the judging period, having started on a Colab T4 behind a quick
+tunnel. Prism reaches it over HTTP at `NATLAS_BASE_URL`. Moving the model
 between hosts is a configuration change, not a code change, and nothing about
 Prism's correctness depends on where the model runs.
+
+## Deployed topology
+
+```
+browser  ──►  Cloudflare Worker (Next.js)      https://atlasprism.aatech.ng
+   │            signs in via Neon Auth, sends the JWT on every API call
+   ▼
+Prism API (FastAPI on Fly.io, iad)             https://atlas-prism-api.fly.dev
+   ├── projects, suites, runs, traces  ──►  Neon PostgreSQL (us-east-2)
+   └── inference  ──►  N-ATLAS on Lightning AI (Tesla T4, 4-bit NF4)
+```
+
+The browser never contacts the model and never holds the inference key; only
+the API does, from `NATLAS_API_KEY`, and only to hosts in
+`NATLAS_ALLOWED_HOSTS`. The evaluation platform and the model under test are
+deployed independently — which is what lets Prism credibly *assess* N-ATLAS
+rather than being part of it.
+
+The API runs as **one** machine deliberately: a run executes in-process under
+an asyncio semaphore, and startup recovery marks interrupted runs failed, so a
+second replica could mark a live run on the first as failed.
 
 ## Data flow of one evaluation run
 

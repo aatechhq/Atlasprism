@@ -1,6 +1,6 @@
 # Implementation status
 
-**As of 2026-10-11.** Required by the build path (§0.7) and written to be read
+**As of 2026-10-12.** Required by the build path (§0.7) and written to be read
 by someone deciding whether to trust this repository.
 
 Four categories, kept strictly separate:
@@ -22,15 +22,15 @@ clean type-check, or a reachable `/health` endpoint.
 | PostgreSQL schema (10 tables), Alembic from blank DB | yes | yes | yes |
 | Auth (JWT + PBKDF2), project scoping | yes | yes | yes |
 | Projects & connections CRUD | yes | yes | yes |
-| N-ATLAS connector + error taxonomy | yes | yes | **partial — contract proven over HTTP; not yet against the official weights** |
+| N-ATLAS connector + error taxonomy | yes | yes | **yes — `verified: true` against the official weights, 925 ms, via the deployed API** |
 | Run manager (persist-first, bounded concurrency) | yes | yes | yes |
 | Guard scorers (4 types) | yes | yes | yes |
 | Shield detectors (3 types) | yes | yes | yes |
 | 10 Guard + 10 Shield baseline cases | yes | yes | yes |
 | Pulse metrics from persisted traces | yes | yes | yes |
 | JSON + CSV exports with redaction | yes | yes | yes |
-| Standalone GPU inference service | yes | yes | **model verified on T4 in Colab; not yet serving through Prism** |
-| Frontend (`apps/web`) | yes | no browser suite; typecheck/build pass | **yes against local API; not deployed** |
+| Standalone GPU inference service | yes | yes | **yes — serving N-ATLAS on Lightning AI (T4, 4-bit NF4) and reached by Prism** |
+| Frontend (`apps/web`) | yes | no browser suite; typecheck/build pass | **yes — deployed as a Cloudflare Worker at atlasprism.aatech.ng, signed-in flow exercised end to end** |
 
 ## Test results (actually executed)
 
@@ -82,51 +82,44 @@ outside the repository so it cannot be mistaken for product code or evidence.
 
 ## Blocked
 
-### 1. Prism-to-N-ATLAS integration — PARTIALLY CLEARED, not yet complete
+### 1. Prism-to-N-ATLAS integration — ✅ CLEARED 2026-10-11
 
-**The model itself is confirmed working.** Reported by the project owner on
-2026-10-11, from Google Colab:
+**`POST /api/v1/connections/{id}/verify` returned `verified: true`**, driven by
+the **deployed** API rather than a developer machine:
 
 | | |
 |---|---|
+| When | 2026-10-11T23:25:27Z |
+| Driven by | `https://atlas-prism-api.fly.dev` (Fly.io, region `iad`) |
+| Authenticated as | a real signed-in web user, via Neon Auth |
 | Model | `NCAIR1/N-ATLaS` (official weights, gated repo) |
-| Hugging Face account | `AA-tech`, access granted, auth successful |
-| GPU | NVIDIA Tesla T4, 14.6 GB |
-| Quantization | 4-bit NF4 |
-| GPU allocation | 5.32 GB |
-| Measured inference latency | **8.27 s** |
-| Result | A valid response to a real inference request |
+| Served from | Lightning AI managed deployment, Tesla T4, 4-bit NF4 |
+| `outcome` | `ok`, `upstream_status: 200` |
+| Measured generation latency | **925 ms** |
 
-That is a real generation from the real weights, and it clears the question of
-whether we can run the model at all.
+A full 20-case run followed through the same deployed stack, run
+`82d37773-1ef0-49ce-b03d-958459acae81`: `completed`, **16 passed, 4 failed,
+0 errors**, `pass_rate 0.80`, 56 seconds, with 22/22 successful inference
+attempts in Pulse (0 transport, 0 auth, 0 blocked) and both JSON and CSV
+exports returning 200.
 
-**It is not yet the integration.** No request has been made *from Prism* to
-that model. A successful generation in a notebook and a successful generation
-through Prism are two different claims, and only the second one makes the
-integration real:
+The distinction this document insisted on is therefore satisfied: a generation
+in a notebook and a generation **through Prism** are different claims, and the
+second one now has evidence. Artifacts are committed under
+[`../services/api/docs/integration-evidence/`](../services/api/docs/integration-evidence/),
+scanned clean of credentials.
 
-- Every `model_connections` row still reads `blocked` or `unverified`.
-- Every export still states that live inference was not verified for the run.
-- `POST /api/v1/connections/{id}/verify` has never returned
-  `verified: true` against the official weights.
+**Earlier milestone, kept for the record.** The model was first confirmed
+running on 2026-10-11 in Google Colab — Tesla T4 14.6 GB, 4-bit NF4, 5.32 GB
+allocated, **8.27 s** measured latency. That cleared "can we run the model at
+all", and was explicitly *not* the integration. The hosting has since moved to
+Lightning AI for a stable hostname, because a Colab tunnel dies with the
+runtime.
 
-**What remains, concretely:**
-
-1. Serve the already-loaded Colab model with
-   `attach_preloaded(model, tokenizer, api_key=…)` —
-   see [`../services/inference/colab_launch.md`](../services/inference/colab_launch.md),
-   Path A. Nothing is re-downloaded and no second copy goes on the GPU.
-2. Expose it (Cloudflare quick tunnel) and set `NATLAS_BASE_URL`,
-   `NATLAS_API_KEY`, `NATLAS_ALLOWED_HOSTS`, and
-   `NATLAS_TIMEOUT_MS=120000` (8 s/generation needs headroom).
-3. Call `POST /api/v1/connections/{id}/verify` and keep the response.
-4. Launch the 20-case baseline run with **`max_concurrency: 1`** — the service
-   generates strictly one at a time, because a T4 holding an 8B model at 4-bit
-   has no room for parallel decoding. Expect roughly three minutes for 22
-   attempts at ~8 s each.
-
-Only after step 3 returns `verified: true` may this be described as a working
-N-ATLAS integration.
+**Caveat that matters for any reported figure.** Pass rate varies between runs
+of the *same* suite against the *same* model — 0.75, 0.75 and 0.80 across three
+runs — because generation is sampled (`temperature` defaults to 0.7). Cite a
+run id, or use `repeat_count`. A single pass rate is not a property of N-ATLAS.
 
 **Separately:** the previously documented public gateway
 (`kambah123--natlas-serve-natlasservice-serve.modal.run`) was probed from this
@@ -152,11 +145,22 @@ dated, consented evidence. None has been approached yet. Internal AI agents and
 team members do not count. This is the requirement most likely to miss the
 deadline, since it depends on other people's availability.
 
-### 4. Public repository and deployment — BLOCKED
+### 4. Public deployment — ✅ DEPLOYED; repository visibility still BLOCKED
 
-The repository is local (`git init`, branch `main`) with no remote. Nothing is
-pushed, nothing is deployed, and there is no judge-reachable URL. A GitHub
-remote and a hosting target for the API + PostgreSQL are needed.
+**Deployed and judge-reachable:**
+
+| Component | Where |
+|---|---|
+| Application | <https://atlasprism.aatech.ng> — Next.js on Cloudflare Workers |
+| API | <https://atlas-prism-api.fly.dev> — FastAPI on Fly.io, region `iad`, one 512 MB machine |
+| Database | Neon PostgreSQL, `us-east-2`, pooled connection |
+| Model | `NCAIR1/N-ATLaS` on a Lightning AI managed deployment (Tesla T4, 4-bit NF4) |
+| Sign-in | Neon Auth (`AUTH_MODE=neon`); the API validates its tokens against the published JWKS |
+
+**Still blocked:** the GitHub repository (`azi-a-i/atlasprism`) is **private**.
+PS1 requires a public repository for judges, so it must be made public
+(`gh repo edit --visibility public`) or recreated under the final account
+before submission.
 
 ## Known limitations
 
@@ -175,7 +179,11 @@ remote and a hosting target for the API + PostgreSQL are needed.
 - **Latency is client-side** and includes network time.
 - **Guard proves text and structure, not truth.** There is no general
   hallucination detector, and no claim of one.
-- **Single-admin auth.** No signup, roles, or password reset. Adequate for V0.1
+- **Two auth modes, and they are not interchangeable.** `AUTH_MODE=local` uses
+  the seeded admin with `POST /api/v1/auth/login`; `AUTH_MODE=neon` (the
+  deployed setting) validates Neon Auth tokens against its JWKS. A script
+  written against password login **cannot** authenticate to the deployed API.
+- **Single-admin auth (local mode).** No signup, roles, or password reset. Adequate for V0.1
   per the PRD; PBKDF2-HMAC-SHA256 (310k iterations, stdlib) is used instead of
   argon2 to avoid a compiled dependency, and should move to argon2id if this
   ever grows real multi-user signup.

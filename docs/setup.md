@@ -46,7 +46,30 @@ cp .env.example .env
 | `NATLAS_MODEL_ID` | no | Default `NCAIR1/N-ATLaS` |
 | `NATLAS_TIMEOUT_MS` | no | Default 60000 |
 | `NATLAS_ALLOWED_HOSTS` | yes | Comma-separated SSRF allowlist. A host missing here is refused. |
+| `AUTH_MODE` | no | `local` (default) or `neon` — see below |
+| `NEON_AUTH_JWKS_URL` / `NEON_AUTH_ISSUER` / `NEON_AUTH_AUDIENCE` | only when `AUTH_MODE=neon` | See the warning below: the issuer is **not** the JWKS path |
+| `CORS_ALLOW_ORIGINS` | no | Browser origins allowed to call the API. A deployed frontend **must** be listed or the browser blocks every request before it reaches a route. |
 | `RUN_MAX_CONCURRENCY` / `RUN_MAX_CASES` / `RUN_MAX_REPEATS` | no | Cost guards: 2 / 200 / 5 |
+
+### Authentication: two modes, not interchangeable
+
+| `AUTH_MODE` | How a caller authenticates |
+|---|---|
+| `local` (default) | `POST /api/v1/auth/login` with the seeded `ADMIN_EMAIL` / `ADMIN_PASSWORD` returns an HS256 JWT signed with `JWT_SECRET`. Use this for local development and scripts. |
+| `neon` | The caller presents a **Neon Auth** token, which the API verifies against `NEON_AUTH_JWKS_URL` (an `EdDSA`/`Ed25519` key). This is what the deployed API and the website use. |
+
+**A script written against password login cannot authenticate to an API running
+in `neon` mode** — `/auth/login` will still mint a token and every protected
+route will then reject it. That is expected, not a bug.
+
+> **⚠ `NEON_AUTH_ISSUER` must be the bare origin**, e.g.
+> `https://<id>.neonauth.<region>.aws.neon.tech` — **not** the auth base URL
+> with `/neondb/auth` appended. Neon puts the bare origin in the token's `iss`
+> claim, PyJWT compares it exactly, and a mismatch makes every signed-in
+> request fail with `401 "Invalid or expired token."` The **JWKS URL**, by
+> contrast, *does* keep the `/neondb/auth/.well-known/jwks.json` path. This
+> exact mismatch broke the live site on 2026-10-11; verify it by decoding a
+> real token from `GET /api/auth/token` rather than assuming.
 
 **Never commit `.env`.** It is gitignored; `.env.example` holds no real values.
 
@@ -101,9 +124,14 @@ Then follow [usage.md](usage.md) for the full connect → test → export flow.
 
 Prism does not host the model. Point it at a service that does:
 
-1. Stand up `services/inference` on GPU hardware — see
-   [`../services/inference/colab_launch.md`](../services/inference/colab_launch.md)
-   for Colab, or run `serve.py` on a dedicated GPU box.
+1. Stand up `services/inference` on GPU hardware. For a persistent endpoint
+   with a stable hostname — what the live deployment uses — follow
+   [`../services/inference/lightning_launch.md`](../services/inference/lightning_launch.md).
+   For a throwaway run from a notebook, see
+   [`../services/inference/colab_launch.md`](../services/inference/colab_launch.md);
+   note that a Colab tunnel hostname dies with the runtime, and both
+   `NATLAS_BASE_URL` and `NATLAS_ALLOWED_HOSTS` must be updated each time it
+   changes.
 2. Set in `services/api/.env`:
    ```
    NATLAS_BASE_URL=https://<your-inference-host>
