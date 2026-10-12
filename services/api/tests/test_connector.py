@@ -265,3 +265,54 @@ def test_connector_for_openai_compatible_sends_no_credential():
     c = connector_for(_Conn("openai_compatible", "https://app.example.com", "m"))
     assert isinstance(c, GenericHttpConnector)
     assert getattr(c, "_api_key", None) in (None, "")
+
+
+def test_a_black_box_connection_does_not_claim_a_credential():
+    """The displayed credential must not contradict what is actually sent.
+
+    ConnectionOut reported the N-ATLAS key for every connection, including
+    openai_compatible ones -- which receive no credential at all. A developer
+    reading "configured (****abcd)" on their own endpoint would reasonably
+    conclude Prism was sending them that key.
+    """
+    import datetime as dt
+    import uuid
+
+    from app.api.v1.projects import _connection_out
+
+    class _Row:
+        id = uuid.uuid4()
+        project_id = uuid.uuid4()
+        provider = "openai_compatible"
+        endpoint = "https://app.example.com"
+        model_id = "m"
+        verification_state = "unverified"
+        verification_detail = None
+        verified_at = None
+        created_at = dt.datetime(2026, 1, 1)
+
+    out = _connection_out(_Row())
+    assert "configured (" not in out.credential
+    assert "none sent" in out.credential
+
+
+def test_a_natlas_connection_still_reports_the_redacted_credential():
+    import datetime as dt
+    import uuid
+
+    from app.api.v1.projects import _connection_out
+
+    class _Row:
+        id = uuid.uuid4()
+        project_id = uuid.uuid4()
+        provider = "natlas"
+        endpoint = "https://natlas.example.com"
+        model_id = "NCAIR1/N-ATLaS"
+        verification_state = "verified"
+        verification_detail = None
+        verified_at = None
+        created_at = dt.datetime(2026, 1, 1)
+
+    out = _connection_out(_Row())
+    assert out.credential in ("not configured", "configured") or \
+        out.credential.startswith("configured (****")

@@ -14,7 +14,7 @@ NATLAS_MODEL_ID = "NCAIR1/N-ATLaS"
 # The ownership token is published at a well-known URL by design, so it is a
 # var rather than a secret -- calling it a secret would be theatre. It is set
 # here once ATLAS Prism issues it, then deployed.
-# PRISM_VERIFICATION_VALUE = "prism-verification=<token>"
+PRISM_VERIFICATION_VALUE = "atlas-prism-verification=8lAH2B51YIV2TCuYcB5CsX1KT4LtPKBx"
 
 # NATLAS_BASE_URL and NATLAS_API_KEY are the only real secrets, set with
 # `wrangler secret put`. The upstream key must never appear in a file.

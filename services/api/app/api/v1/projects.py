@@ -29,8 +29,15 @@ router = APIRouter(tags=["projects"])
 
 def _connection_out(conn: ModelConnection) -> ConnectionOut:
     out = ConnectionOut.model_validate(conn)
-    # Only the fact and the last four characters, never the value (PRD 7).
-    out.credential = redact_secret(settings.natlas_api_key)
+    if conn.provider == "openai_compatible":
+        # A black-box target receives NO credential, so reporting the N-ATLAS
+        # key here would claim the opposite of what happens -- a developer
+        # would reasonably read "configured (****abcd)" as "Prism is sending
+        # that key to my endpoint". It is not. Say so.
+        out.credential = "none sent (black-box target)"
+    else:
+        # Only the fact and the last four characters, never the value (PRD 7).
+        out.credential = redact_secret(settings.natlas_api_key)
     return out
 
 
