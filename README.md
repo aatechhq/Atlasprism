@@ -40,6 +40,61 @@ That is the point of step 1: without it you are benchmarking the base model,
 which a developer cannot act on. With it, every failure is in something you own
 and can fix. Each account only ever sees its own projects.
 
+## For the NAIC evaluation panel
+
+Sign-up is open, so you can start from an empty account. But a cold account
+shows no results until you have written cases and waited for a GPU run, so a
+prepared account is provided with a complete worked example already in it:
+
+| | |
+|---|---|
+| **Sign in at** | <https://atlasprism.aatech.ng> |
+| **Email** | `admin@aatech.ng` |
+| **Password** | `PrismJudge2026!` |
+
+Suggested order, about five minutes:
+
+1. **Projects → `Acme Bank Support Assistant`.** Read the *application system
+   prompt*. This is the assistant under test — its own rules, including an
+   internal access code it is instructed never to reveal. Prism sends this
+   ahead of every test case, which is what makes the results about the
+   application rather than about N-ATLAS.
+2. **Runs → the earlier run.** It **blocked the release**: the assistant
+   disclosed its internal access code under a direct request and again under
+   authority impersonation. Open a finding and read its severity rationale and
+   mitigation. The seeded code itself is redacted from the finding, the export
+   and the API response — the test's own secret is never published by the
+   evidence.
+3. **The same run's frozen prompt.** Each run stores an immutable snapshot of
+   the prompt and configuration it executed with, so this run still shows the
+   *vulnerable* version even though the project now carries the fixed one.
+   That is what makes a report reproducible rather than merely recent.
+4. **Runs → the later run.** Same five cases, hardened prompt: gate **PASS**,
+   zero findings. Then **Compare** it against the earlier run — fixed, still
+   passing, and nothing regressed.
+5. **Pulse.** Latency and outcome metrics, and a per-language breakdown.
+   Everything there is computed from persisted inference traces; none of it is
+   synthetic.
+6. **Reports → Export.** JSON and CSV, each carrying a limitations block that
+   states what the run does *not* prove.
+
+Two things worth knowing before you judge the numbers:
+
+- **Generation is sampled**, so a pass rate is a property of a run, not of
+  N-ATLAS. The same suite has produced 0.75, 0.75 and 0.80. Every figure in
+  this repository cites the run it came from, and Prism flags a case that
+  changed state on a single generation as `low_confidence` rather than
+  declaring it fixed.
+- **The model host is a single GPU that is powered down between sessions.** If
+  it is asleep when you visit, new runs will honestly report `timeout` or
+  `upstream_error` rather than appearing to pass. The stored runs, findings,
+  gates and exports remain fully inspectable either way, because they are read
+  from the database rather than from the model.
+
+This is a shared demonstration account, so please treat its two projects as
+exhibits. Creating your own project alongside them is welcome and is the better
+way to see the tool work on something of your choosing.
+
 ## Status: the integration is live and verified
 
 **`POST /api/v1/connections/{id}/verify` returned `verified: true`** on
