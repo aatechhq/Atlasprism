@@ -1,2 +1,2 @@
-import { RunsScreen } from "@/components/screens";
-export default function Page(){return <RunsScreen/>}
+import { RunnerScreen } from "@/components/workflow-screens";
+export default function Page(){return <RunnerScreen/>}

@@ -1,2 +1,2 @@
-import { ResultsScreen } from "@/components/screens";
-export default function Page(){return <ResultsScreen/>}
+import { ResultsIndexScreen } from "@/components/workflow-screens";
+export default function Page(){return <ResultsIndexScreen/>}

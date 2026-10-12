@@ -1,2 +1,2 @@
-import { ProjectProfileSettings, ProjectsScreen } from "@/components/screens";
-export default function Page(){return <><ProjectsScreen/><ProjectProfileSettings/></>}
+import { ProjectFlowScreen } from "@/components/workflow-screens";
+export default function Page(){return <ProjectFlowScreen/>}

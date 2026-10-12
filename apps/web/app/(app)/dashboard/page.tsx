@@ -1,2 +1,2 @@
-import { RefinedDashboardScreen } from "@/components/screens";
-export default function Page(){return <RefinedDashboardScreen/>}
+import { WorkflowDashboard } from "@/components/workflow-screens";
+export default function Page(){return <WorkflowDashboard/>}

@@ -1,2 +1,2 @@
-import { ReportsScreen } from "@/components/screens";
-export default function Page(){return <ReportsScreen/>}
+import { ReportWorkspaceScreen } from "@/components/workflow-screens";
+export default function Page(){return <ReportWorkspaceScreen/>}
