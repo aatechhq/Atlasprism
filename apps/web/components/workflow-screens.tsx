@@ -157,13 +157,36 @@ export function RunnerScreen() {
 
 export function RunMonitorScreen({ runId }: { runId: string }) {
   const [refresh, setRefresh] = useState(0); const run = useResource<Run>(`/runs/${runId}`, refresh);
-  useEffect(() => { if (run.data && ["queued", "running"].includes(run.data.status)) { const timer = window.setTimeout(() => setRefresh(value => value + 1), 2500); return () => window.clearTimeout(timer); } }, [run.data, refresh]);
+  const [misses, setMisses] = useState(0);
+  // useResource keeps the last good value when a request fails, so progress
+  // already on screen stays on screen.
   const terminal = Boolean(run.data && !["queued", "running"].includes(run.data.status));
+  // Poll until the run reaches a terminal state, scheduling the next attempt
+  // only once the previous one settles -- so a slow API is waited for rather
+  // than piled onto. Crucially this does NOT stop on failure: the old version
+  // keyed off run.data, so a run whose every poll timed out never advanced and
+  // the page sat behind an error until someone pressed Refresh by hand.
+  useEffect(() => {
+    if (terminal || run.loading) return;
+    const timer = window.setTimeout(() => setRefresh(value => value + 1), 5000);
+    return () => window.clearTimeout(timer);
+  }, [terminal, run.loading, refresh]);
+  // Count consecutive failures so a transient miss reads as "still working"
+  // and only a sustained outage is reported as a problem.
+  useEffect(() => {
+    if (run.loading) return;
+    setMisses(previous => (run.error ? previous + 1 : 0));
+  }, [run.loading, run.error, refresh]);
+  const waiting = !terminal && misses > 0;
   const done = run.data ? run.data.passed_count + run.data.failed_count + run.data.error_count + run.data.skipped_count : 0;
   const progress = run.data?.total_cases ? Math.round(done / run.data.total_cases * 100) : 0;
-  return <><FlowHeader step={3} back={{ href: "/runs", label: "Run ledger" }} title={`Run ${runId.slice(0, 8)}`} description={terminal ? "Execution is complete. Continue to the evidence explorer for case-level reasoning." : "Prism is persisting each inference attempt and scoring outcome as it completes."} actions={<button className="btn btn-secondary" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15}/>Refresh</button>}/>{run.error && <Notice error>{run.error}</Notice>}{run.loading && !run.data ? <div className="card loading-panel">Reading run state…</div> : run.data && <>
+  return <><FlowHeader step={3} back={{ href: "/runs", label: "Run ledger" }} title={`Run ${runId.slice(0, 8)}`} description={terminal ? "Execution is complete. Continue to the evidence explorer for case-level reasoning." : "Prism is persisting each inference attempt and scoring outcome as it completes."} actions={<button className="btn btn-secondary" onClick={() => setRefresh(value => value + 1)}><RefreshCw size={15}/>Refresh</button>}/>{waiting
+    ? <Notice>{misses < 4
+        ? "Evaluation running. The API is busy generating, so this view is retrying in the background — nothing is lost and you do not need to refresh."
+        : `Still evaluating. ${misses} status checks in a row have not come back yet; the run itself continues on the server. This page keeps retrying.`}</Notice>
+    : run.error && <Notice error>{run.error}</Notice>}{run.loading && !run.data ? <div className="card loading-panel">Reading run state…</div> : run.data && <>
     <section className="card run-monitor"><div className="run-monitor-top"><div><span>Execution status</span><h2>{terminal ? "Evaluation reached a terminal state" : "Evaluation in progress"}</h2></div><StatusBadge status={run.data.status}/></div><div className="progress large"><span style={{ width: `${progress}%` }}/></div><div className="run-progress-copy"><strong>{done} / {run.data.total_cases} terminal cases</strong><span>{progress}%</span></div><div className="kpi-strip compact"><Kpi label="Passed" value={String(run.data.passed_count)} note="Met evaluator rule" tone="guard"/><Kpi label="Failed" value={String(run.data.failed_count)} note="Missed evaluator rule" tone="shield"/><Kpi label="Errors" value={String(run.data.error_count)} note="Not scored" tone="pulse"/><Kpi label="Pass rate" value={percent(run.data.pass_rate)} note={run.data.pass_rate_definition}/></div><div className="run-metadata"><span>Model <strong>{run.data.model_id ?? "not recorded"}</strong></span><span>Scoring <strong>{run.data.scoring_version}</strong></span><span>Started <strong>{formatDate(run.data.started_at ?? run.data.created_at)}</strong></span></div></section>
-    {terminal ? <ContinueBar eyebrow="Execution complete" title="Inspect the evidence" description="Review every prompt, response, evaluator rule, explanation and finding before exporting." href={`/results/${runId}`} action="Open results explorer"/> : <section className="live-run-note"><Activity size={17}/><div><strong>Safe to leave this page</strong><p>The backend continues the persisted run. Return through the run ledger to check it later.</p></div></section>}
+    {terminal ? <ContinueBar eyebrow="Execution complete" title="Inspect the evidence" description="Review every prompt, response, evaluator rule, explanation and finding before exporting." href={`/results/${runId}`} action="Open results explorer"/> : <section className="live-run-note"><Activity size={17}/><div><strong>{run.loading ? "Checking run status…" : "Updating automatically every few seconds"}</strong><p>Safe to leave this page — the backend continues the persisted run, and returning through the run ledger picks it up where it is. The Refresh button is there if you want an immediate check, but it is not required.</p></div></section>}
   </>}</>;
 }
 

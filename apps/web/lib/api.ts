@@ -1,6 +1,12 @@
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 const READ_TIMEOUT_MS = 15_000;
 const VERIFY_TIMEOUT_MS = 130_000;
+// A run executes in-process on a single-worker API, so while an evaluation is
+// generating, a read of its own status can sit behind that work for far longer
+// than a normal request. 15s was timing out on every poll of a live run, which
+// surfaced as "The API did not respond in time." until the run finished and a
+// manual refresh succeeded. The request was never wrong, only early.
+const RUN_READ_TIMEOUT_MS = 60_000;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -23,7 +29,9 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const controller = new AbortController();
   const timeoutMs = /^\/connections\/[^/]+\/verify$/.test(path)
     ? VERIFY_TIMEOUT_MS
-    : READ_TIMEOUT_MS;
+    : /^\/runs(\/|\?|$)/.test(path)
+      ? RUN_READ_TIMEOUT_MS
+      : READ_TIMEOUT_MS;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(`${BASE}${path}`, {

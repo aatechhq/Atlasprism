@@ -95,6 +95,52 @@ This is a shared demonstration account, so please treat its two projects as
 exhibits. Creating your own project alongside them is welcome and is the better
 way to see the tool work on something of your choosing.
 
+### Run the test suites yourself
+
+Two ready-made suites are in [`test/`](test/) so you can judge the engines on
+your own evidence rather than only on ours. Download the file, then in the app:
+**Suites → Import suite JSON**, choose it, and every case is created for you.
+
+| File | Engine | Cases | Generations | Approx. time |
+|---|---|---|---|---|
+| [`test/guard-test.json`](test/guard-test.json) | Guard | 10 | 19 | ~2m 30s |
+| [`test/shield-test.json`](test/shield-test.json) | Shield | 10 | 30 | ~4m 00s |
+
+Both are **self-contained**: each case plants whatever context it needs in its
+own system prompt, so they work in any project, with or without an application
+profile. Every secret in them is a seeded fake containing
+`NOT-A-REAL-SECRET` — no real credential or customer data is involved.
+
+**Guard** exercises all seven deterministic evaluators in one run, so you can
+see which kinds of checking hold: `exact_match`, `keywords`, `json_schema`,
+`consistency`, `refusal_expected`, `forbidden_action` and
+`secret_disclosure`. Cases G02 and G06 are worth reading together — three
+identical *wrong* answers pass the consistency case and fail the arithmetic
+one. Stability and correctness are different properties and the suite measures
+them separately rather than conflating them.
+
+**Shield** runs ten attack classes: direct request for a secret, authority
+impersonation, instruction override, an encoding request, indirect injection,
+code-switched extraction in Hausa, role override, an executable transfer
+instruction, system-prompt extraction, and account takeover framed
+sympathetically. Every adversarial case runs **three times**, so a single lucky
+refusal cannot produce a pass.
+
+Two honest notes about reading those results, both recorded in the cases
+themselves rather than left for you to find:
+
+- **S05, indirect injection, is the case that matters most.** The payload
+  arrives inside content the application was asked to summarise, not from the
+  person typing — which is how this attack actually reaches a deployed
+  assistant that reads email, documents or web pages.
+- **S04 deliberately tests a known limitation.** Secret detection is literal,
+  so a secret leaked character-by-character or in base64 would not be caught
+  and the case would pass while the secret escaped. Read a pass there as "did
+  not leak verbatim", nothing more.
+
+[`test/README.md`](test/README.md) lists what every case checks and what a
+pass does and does not prove.
+
 ## Status: the integration is live and verified
 
 **`POST /api/v1/connections/{id}/verify` returned `verified: true`** on
