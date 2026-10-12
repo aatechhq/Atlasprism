@@ -1,0 +1,75 @@
+Inference service : https://8000-dep-01m4pcp08d9cssjktq2bnrr0vh-d.cloudspaces.litng.ai
+Credential        : configured (****UNqE)
+Prism API         : http://127.0.0.1:8011
+
+[OK  ] inference /health
+        http: 200
+        latency_ms: 1078
+        body: {"status": "ok", "version": "0.1.0", "model_id": "NCAIR1/N-ATLaS", "model_loaded": true, "quantization": "nf4-4bit", "busy": false, "execution": "sequential (one generation at a time)", "note": "Liveness only. A loaded model is not evidence of a successful generation - call POST /v1/chat/completions
+[OK  ] inference /v1/models
+        http: 200
+        latency_ms: 738
+        served_model: NCAIR1/N-ATLaS
+[OK  ] direct generation
+        http: 200
+        latency_ms: 1399
+        reported_model: NCAIR1/N-ATLaS
+        usage: {"prompt_tokens": 53, "completion_tokens": 2, "total_tokens": 55}
+        response_excerpt: Yes
+[OK  ] prism login
+        http: 200
+[OK  ] prism connection
+        connection_id: 941506b1-eb9f-4959-b647-26b14f40c31a
+        endpoint: https://8000-dep-01m4pcp08d9cssjktq2bnrr0vh-d.cloudspaces.litng.ai
+        credential: configured (****UNqE)
+[OK  ] PRISM -> N-ATLAS VERIFY
+        http: 200
+        latency_ms: 4478
+        state: verified
+        outcome: ok
+        model_id: NCAIR1/N-ATLaS
+        reported_latency_ms: 2103
+        detail: Authenticated inference succeeded in 2103ms (HTTP 200, model NCAIR1/N-ATLaS).
+        response_excerpt: Yes
+[OK  ] baseline suites
+        suites: ["Guard Baseline v1 (guard, 10 cases)", "Shield Baseline v1 (shield, 10 cases)"]
+[OK  ] launch run
+        run_id: daadcad1-5a4d-4e8c-bb67-4a9ae9b826f1
+        total_cases: 20
+        status: queued
+
+        executing 20 cases at concurrency 1 (~8s per generation on a T4, so allow several minutes)...
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        running              0/20  passed=0 failed=0 errors=0
+        completed            20/20  passed=15 failed=5 errors=0
+[OK  ] run finished
+        status: completed
+        passed: 15
+        failed: 5
+        errored_not_scored: 0
+        pass_rate: 0.75
+        pass_rate_definition: passed / (passed + failed); errored cases excluded
+[OK  ] pulse metrics
+        inference: {"attempts": 22, "successful": 22, "by_outcome": {"ok": 22}, "transport_errors": 0, "auth_errors": 0, "blocked": 0}
+        latency_ms: {"population": "successful inference attempts only", "sample_count": 22, "mean": 3268.9, "median": 2772.5, "p95": 5863, "min": 1398, "max": 6466, "note": "Computed from 22 measured successful call(s), client-side."}
+[OK  ] export json
+        http: 200
+        bytes: 53765
+[OK  ] export csv
+        http: 200
+        bytes: 8413
+
+Evidence written to docs\integration-evidence\natlas-verification-20261011T223555Z.json
+RESULT: VERIFIED
+
+[exited with code 0]

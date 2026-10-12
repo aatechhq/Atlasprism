@@ -95,6 +95,47 @@ atlas-prism/
 Face auth and model loading live there, on GPU hardware. The Prism backend
 speaks plain HTTP to it and has **no ML dependencies at all**.
 
+## N-ATLAS integration
+
+Prism speaks to N-ATLAS over the documented gateway contract, through a single
+connector (`services/api/app/connectors/natlas.py`). There is **one** adapter
+and no fallback to any other provider.
+
+| | |
+|---|---|
+| Endpoints used | `POST /v1/chat/completions` for inference, and `GET /health` for a diagnostic reachability probe only |
+| Authentication | `Authorization: Bearer $NATLAS_API_KEY`, loaded server-side only |
+| Default model id | `NCAIR1/N-ATLaS` |
+| Timeout | `NATLAS_TIMEOUT_MS` (120000 against GPU hosting) |
+| Host allowlist | `NATLAS_ALLOWED_HOSTS` — an SSRF guard; a host not listed is refused |
+
+The connector calls **only** those two paths: `/v1/chat/completions` is the
+inference call, and `/health` backs
+`GET /api/v1/connections/{id}/gateway-health`, a reachability probe whose own
+docstring states it is *"explicitly NOT integration evidence"*. The gateway's
+`/v1/models` route is not consulted by Prism.
+
+The connector normalises prompt, response, model id, timing and usage into one
+shape, and classifies failures explicitly: `401`, `429`, timeout, network and
+upstream error are distinct outcomes. **An error is never scored as a quality
+failure or as a passed security defence** — it is recorded as `error` and
+excluded from the pass rate.
+
+What establishes the integration:
+
+```
+POST /api/v1/connections/{id}/verify   ->   "verified": true
+```
+
+That endpoint performs a **real authenticated generation**. A successful
+`/health` check does not count and the endpoint says so in its own response
+body. Credentials are never returned by any API route, and never appear in a
+report, trace or export — only `configured (****last4)`.
+
+If no key is configured, Prism reports connections as `blocked` rather than
+simulating success. Nothing in this repository substitutes another model for
+N-ATLAS.
+
 ## Run it locally
 
 Requires Python 3.11+, Docker, and [uv](https://docs.astral.sh/uv/).
@@ -161,7 +202,10 @@ not a bug.
 | [docs/usage.md](docs/usage.md) | End-to-end walkthrough with real requests |
 | [docs/deployment-api.md](docs/deployment-api.md) | How the API is deployed, and its secrets |
 | [services/inference/lightning_launch.md](services/inference/lightning_launch.md) | Serving N-ATLAS persistently on GPU hosting |
-| [docs/evaluation-methodology.md](docs/evaluation-methodology.md) | Every scorer, what it proves and what it does not |
+| [docs/evaluation-methodology.md](docs/evaluation-methodology.md) | Guard, Shield and Pulse — every scorer, what it proves and what it does not |
+| [docs/testing.md](docs/testing.md) | How to run the tests, what they cover and what they cannot |
+| [docs/reporting.md](docs/reporting.md) | Report contents, export formats, redaction and limitations |
+| [docs/beta-testing.md](docs/beta-testing.md) | External developer assessment and independent verification |
 | [docs/api-contract.md](docs/api-contract.md) | The REST contract the frontend builds against |
 | [docs/implementation-status.md](docs/implementation-status.md) | Implemented / tested / live-verified / blocked |
 

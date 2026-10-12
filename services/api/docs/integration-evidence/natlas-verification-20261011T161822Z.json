@@ -1,0 +1,65 @@
+{
+  "artifact": "ATLAS Prism - N-ATLAS live integration evidence",
+  "generated_at": "2026-10-11T16:18:17.189039+00:00",
+  "inference_service": {
+    "base_url": "https://hamilton-calculation-perspectives-featured.trycloudflare.com",
+    "credential": "configured (****7iK0)"
+  },
+  "model_id_requested": "NCAIR1/N-ATLaS",
+  "prism_api": "https://atlas-prism-api.fly.dev",
+  "steps": [
+    {
+      "step": "inference /health",
+      "ok": true,
+      "at": "2026-10-11T16:18:18.252971+00:00",
+      "http": 200,
+      "latency_ms": 1063,
+      "body": {
+        "status": "ok",
+        "version": "0.1.0",
+        "model_id": "NCAIR1/N-ATLaS",
+        "model_loaded": true,
+        "quantization": "nf4-4bit",
+        "busy": false,
+        "execution": "sequential (one generation at a time)",
+        "note": "Liveness only. A loaded model is not evidence of a successful generation - call POST /v1/chat/completions."
+      }
+    },
+    {
+      "step": "inference /v1/models",
+      "ok": true,
+      "at": "2026-10-11T16:18:19.045115+00:00",
+      "http": 200,
+      "latency_ms": 791,
+      "served_model": "NCAIR1/N-ATLaS"
+    },
+    {
+      "step": "direct generation",
+      "ok": true,
+      "at": "2026-10-11T16:18:20.037905+00:00",
+      "http": 200,
+      "latency_ms": 992,
+      "reported_model": "NCAIR1/N-ATLaS",
+      "usage": {
+        "prompt_tokens": 53,
+        "completion_tokens": 2,
+        "total_tokens": 55
+      },
+      "response_excerpt": "Yes"
+    },
+    {
+      "step": "prism login",
+      "ok": true,
+      "at": "2026-10-11T16:18:20.809901+00:00",
+      "http": 200
+    },
+    {
+      "step": "prism project",
+      "ok": false,
+      "at": "2026-10-11T16:18:22.727119+00:00",
+      "http": 401,
+      "hint": "Run `python -m app.evaluation.seed` first."
+    }
+  ],
+  "result": "failed"
+}

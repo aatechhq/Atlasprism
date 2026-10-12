@@ -1,0 +1,19 @@
+{
+  "artifact": "ATLAS Prism - N-ATLAS live integration evidence",
+  "generated_at": "2026-10-11T13:08:39.754005+00:00",
+  "inference_service": {
+    "base_url": "https://kambah123--natlas-serve-natlasservice-serve.modal.run",
+    "credential": "not configured"
+  },
+  "model_id_requested": "NCAIR1/N-ATLaS",
+  "prism_api": "http://127.0.0.1:8000",
+  "steps": [
+    {
+      "step": "preflight",
+      "ok": false,
+      "at": "2026-10-11T13:08:39.754005+00:00",
+      "error": "No API key. Set NATLAS_API_KEY in services/api/.env. Prism reports connections 'blocked' without it - by design."
+    }
+  ],
+  "result": "failed"
+}

@@ -1,0 +1,207 @@
+{
+  "artifact": "ATLAS Prism - N-ATLAS live integration evidence",
+  "generated_at": "2026-10-11T22:32:34.476089+00:00",
+  "inference_service": {
+    "base_url": "https://8000-dep-01m4pcp08d9cssjktq2bnrr0vh-d.cloudspaces.litng.ai",
+    "credential": "configured (****UNqE)"
+  },
+  "model_id_requested": "NCAIR1/N-ATLaS",
+  "prism_api": "http://127.0.0.1:8011",
+  "steps": [
+    {
+      "step": "inference /health",
+      "ok": true,
+      "at": "2026-10-11T22:32:35.554883+00:00",
+      "http": 200,
+      "latency_ms": 1078,
+      "body": {
+        "status": "ok",
+        "version": "0.1.0",
+        "model_id": "NCAIR1/N-ATLaS",
+        "model_loaded": true,
+        "quantization": "nf4-4bit",
+        "busy": false,
+        "execution": "sequential (one generation at a time)",
+        "note": "Liveness only. A loaded model is not evidence of a successful generation - call POST /v1/chat/completions."
+      }
+    },
+    {
+      "step": "inference /v1/models",
+      "ok": true,
+      "at": "2026-10-11T22:32:36.292621+00:00",
+      "http": 200,
+      "latency_ms": 738,
+      "served_model": "NCAIR1/N-ATLaS"
+    },
+    {
+      "step": "direct generation",
+      "ok": true,
+      "at": "2026-10-11T22:32:37.692870+00:00",
+      "http": 200,
+      "latency_ms": 1399,
+      "reported_model": "NCAIR1/N-ATLaS",
+      "usage": {
+        "prompt_tokens": 53,
+        "completion_tokens": 2,
+        "total_tokens": 55
+      },
+      "response_excerpt": "Yes"
+    },
+    {
+      "step": "prism login",
+      "ok": true,
+      "at": "2026-10-11T22:32:38.969826+00:00",
+      "http": 200
+    },
+    {
+      "step": "prism connection",
+      "ok": true,
+      "at": "2026-10-11T22:32:43.456641+00:00",
+      "connection_id": "941506b1-eb9f-4959-b647-26b14f40c31a",
+      "endpoint": "https://8000-dep-01m4pcp08d9cssjktq2bnrr0vh-d.cloudspaces.litng.ai",
+      "credential": "configured (****UNqE)"
+    },
+    {
+      "step": "PRISM -> N-ATLAS VERIFY",
+      "ok": true,
+      "at": "2026-10-11T22:32:47.936186+00:00",
+      "http": 200,
+      "latency_ms": 4478,
+      "state": "verified",
+      "outcome": "ok",
+      "model_id": "NCAIR1/N-ATLaS",
+      "reported_latency_ms": 2103,
+      "detail": "Authenticated inference succeeded in 2103ms (HTTP 200, model NCAIR1/N-ATLaS).",
+      "response_excerpt": "Yes"
+    },
+    {
+      "step": "baseline suites",
+      "ok": true,
+      "at": "2026-10-11T22:32:49.777688+00:00",
+      "suites": [
+        "Guard Baseline v1 (guard, 10 cases)",
+        "Shield Baseline v1 (shield, 10 cases)"
+      ]
+    },
+    {
+      "step": "launch run",
+      "ok": true,
+      "at": "2026-10-11T22:32:56.693938+00:00",
+      "run_id": "daadcad1-5a4d-4e8c-bb67-4a9ae9b826f1",
+      "total_cases": 20,
+      "status": "queued"
+    },
+    {
+      "step": "run finished",
+      "ok": true,
+      "at": "2026-10-11T22:35:33.058823+00:00",
+      "status": "completed",
+      "passed": 15,
+      "failed": 5,
+      "errored_not_scored": 0,
+      "pass_rate": 0.75,
+      "pass_rate_definition": "passed / (passed + failed); errored cases excluded",
+      "error_summary": null
+    },
+    {
+      "step": "pulse metrics",
+      "ok": true,
+      "at": "2026-10-11T22:35:36.113478+00:00",
+      "inference": {
+        "attempts": 22,
+        "successful": 22,
+        "by_outcome": {
+          "ok": 22
+        },
+        "transport_errors": 0,
+        "auth_errors": 0,
+        "blocked": 0
+      },
+      "latency_ms": {
+        "population": "successful inference attempts only",
+        "sample_count": 22,
+        "mean": 3268.9,
+        "median": 2772.5,
+        "p95": 5863,
+        "min": 1398,
+        "max": 6466,
+        "note": "Computed from 22 measured successful call(s), client-side."
+      }
+    },
+    {
+      "step": "export json",
+      "ok": true,
+      "at": "2026-10-11T22:35:45.043737+00:00",
+      "http": 200,
+      "bytes": 53765
+    },
+    {
+      "step": "export csv",
+      "ok": true,
+      "at": "2026-10-11T22:35:55.710526+00:00",
+      "http": 200,
+      "bytes": 8413
+    }
+  ],
+  "result": "verified",
+  "integration": {
+    "verified": true,
+    "verified_at": "2026-10-11T22:32:47.936186+00:00",
+    "model_id": "NCAIR1/N-ATLaS",
+    "latency_ms": 2103,
+    "upstream_status": 200,
+    "note": "A real authenticated generation made by Prism itself, not a health check."
+  },
+  "run": {
+    "id": "daadcad1-5a4d-4e8c-bb67-4a9ae9b826f1",
+    "status": "completed",
+    "total_cases": 20,
+    "passed_count": 15,
+    "failed_count": 5,
+    "error_count": 0,
+    "pass_rate": 0.75,
+    "pass_rate_definition": "passed / (passed + failed); errored cases excluded",
+    "scoring_version": "1.0.0",
+    "model_id": "NCAIR1/N-ATLaS",
+    "started_at": "2026-10-11T22:32:54.764215Z",
+    "completed_at": "2026-10-11T22:35:26.988441Z"
+  },
+  "pulse": {
+    "scope": {
+      "project_id": "cc8111d9-0da6-49af-bab5-821a340da7bb",
+      "run_id": "daadcad1-5a4d-4e8c-bb67-4a9ae9b826f1"
+    },
+    "inference": {
+      "attempts": 22,
+      "successful": 22,
+      "by_outcome": {
+        "ok": 22
+      },
+      "transport_errors": 0,
+      "auth_errors": 0,
+      "blocked": 0
+    },
+    "latency_ms": {
+      "population": "successful inference attempts only",
+      "sample_count": 22,
+      "mean": 3268.9,
+      "median": 2772.5,
+      "p95": 5863,
+      "min": 1398,
+      "max": 6466,
+      "note": "Computed from 22 measured successful call(s), client-side."
+    },
+    "results": {
+      "runs": 1,
+      "passed": 15,
+      "failed": 5,
+      "errored_not_scored": 0,
+      "pass_rate": 0.75,
+      "pass_rate_definition": "passed / (passed + failed); errors excluded"
+    },
+    "models_seen": [
+      "NCAIR1/N-ATLaS"
+    ],
+    "data_source": "computed from inference_traces and test_runs rows; no synthetic data"
+  }
+}
