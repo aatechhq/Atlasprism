@@ -45,11 +45,14 @@ def _label(rc: RunCase) -> str:
     return (rc.case_snapshot or {}).get("name") or "(unnamed case)"
 
 
-def _verdict(before: RunCase | None, after: RunCase | None) -> str:
+def _verdict(before: RunCase | None, after: RunCase | None, *, subset: bool) -> str:
     if before is None:
         return "added"
     if after is None:
-        return "removed"
+        # A retest deliberately runs a subset. Those cases were not deleted and
+        # saying "removed" would read as deletion, so name what actually
+        # happened: they were not part of this run.
+        return "not_in_this_run" if subset else "removed"
     if before.state not in _SCORED or after.state not in _SCORED:
         return "inconclusive"
     if before.passed and after.passed:
@@ -96,15 +99,20 @@ def compare_runs(db: Session, *, baseline: TestRun, current: TestRun) -> dict[st
     after = {_key(rc): rc for rc in db.scalars(
         select(RunCase).where(RunCase.run_id == current.id)).all()}
 
+    # A retest covers only the cases that did not pass, so `current` is a
+    # strict subset of `baseline`. Comparing aggregate rates across different
+    # populations is meaningless, and this is how we detect that.
+    subset = bool(after) and set(after).issubset(set(before)) and len(after) < len(before)
+
     cases: list[dict[str, Any]] = []
     summary = {"regressed": 0, "fixed": 0, "still_passing": 0, "still_failing": 0,
-               "inconclusive": 0, "added": 0, "removed": 0}
+               "inconclusive": 0, "added": 0, "removed": 0, "not_in_this_run": 0}
     low_confidence = 0
 
     for key in sorted(before.keys() | after.keys(),
                       key=lambda k: _label(after.get(k) or before[k]).lower()):
         b, a = before.get(key), after.get(key)
-        verdict = _verdict(b, a)
+        verdict = _verdict(b, a, subset=subset)
         summary[verdict] += 1
         # A flip measured from one sample on each side may be sampling, not a
         # change in behaviour. Say so per case rather than burying it.
@@ -128,16 +136,35 @@ def compare_runs(db: Session, *, baseline: TestRun, current: TestRun) -> dict[st
         })
 
     b_rate, c_rate = _pass_rate(baseline), _pass_rate(current)
+    # Comparable only when both runs covered the same cases. A retest's rate is
+    # higher almost by construction -- it re-ran only what had failed -- so
+    # publishing a delta there would invent an improvement.
+    comparable = not subset and summary["added"] == 0 and summary["removed"] == 0
+    delta = (None if (b_rate is None or c_rate is None or not comparable)
+             else round(c_rate - b_rate, 4))
+
     return {
         "baseline": _run_header(baseline),
         "current": _run_header(current),
-        "pass_rate_delta": (None if b_rate is None or c_rate is None
-                            else round(c_rate - b_rate, 4)),
+        "is_subset": subset,
+        "populations_comparable": comparable,
+        "pass_rate_delta": delta,
+        "pass_rate_delta_note": (
+            None if comparable else
+            "Not reported: the two runs did not cover the same cases, so their "
+            "pass rates describe different populations. Compare the per-case "
+            "verdicts instead."
+        ),
         "summary": summary,
         "low_confidence_changes": low_confidence,
         "cases": cases,
         "interpretation": {
             "regressed": "passed in the baseline, did not pass now",
+            "not_in_this_run": (
+                "present in the baseline but not executed in this run -- a "
+                "retest runs only the cases that did not pass. The case was "
+                "not deleted."
+            ),
             "fixed": "did not pass in the baseline, passes now",
             "inconclusive": (
                 "at least one side errored. An error is a service or network "
