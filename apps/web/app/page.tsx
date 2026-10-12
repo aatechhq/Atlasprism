@@ -70,21 +70,25 @@ export default function HomePage() {
 
       <section className="landing-system">
         <div className="system-heading">
-          <h2>Three lenses. One evaluation record.</h2>
-          <p>Every score stays connected to the application rules, model response, latency, and test definition that produced it.</p>
+          <p className="landing-kicker">Product outline</p>
+          <h2>Guard. Shield. Pulse.</h2>
+          <p>Three parts inspect the same application from quality, security, and performance perspectives. Every conclusion stays connected to one evaluation record.</p>
         </div>
         <div className="engine-grid">
           <article className="engine-card guard-card">
-            <span className="engine-index">Guard</span><ScanSearch />
-            <h3>Quality against your rules</h3><p>Apply your application prompt before every case and retain the model response behind each result.</p>
+            <div className="engine-card-head"><span className="engine-index">01 / Guard</span><span className="engine-role">Quality</span></div><ScanSearch />
+            <h3>Did the application follow its rules?</h3><p>Apply your application prompt before every case and retain the model response and scoring rationale behind each result.</p>
+            <span className="engine-output">Produces scored case evidence</span>
           </article>
           <article className="engine-card shield-card">
-            <span className="engine-index">Shield</span><LockKeyhole />
-            <h3>Findings you can act on</h3><p>Inspect bounded security outcomes with severity rationale, redacted evidence, and mitigation guidance.</p>
+            <div className="engine-card-head"><span className="engine-index">02 / Shield</span><span className="engine-role">Security</span></div><LockKeyhole />
+            <h3>Can bounded attacks override those rules?</h3><p>Inspect authorized security outcomes with severity rationale, redacted evidence, and mitigation guidance.</p>
+            <span className="engine-output">Produces actionable findings</span>
           </article>
           <article className="engine-card pulse-card">
-            <span className="engine-index">Pulse</span><Gauge />
-            <h3>Performance with context</h3><p>Read latency, trace outcomes, model identity, and language-level sample counts from persisted calls.</p>
+            <div className="engine-card-head"><span className="engine-index">03 / Pulse</span><span className="engine-role">Observability</span></div><Gauge />
+            <h3>What happened during real inference?</h3><p>Read latency, trace outcomes, model identity, and language-level sample counts from persisted calls.</p>
+            <span className="engine-output">Produces performance context</span>
           </article>
         </div>
       </section>
