@@ -23,9 +23,22 @@ One evaluation pipeline, three views:
 | **Application** | <https://atlasprism.aatech.ng> |
 | **API** | <https://atlas-prism-api.fly.dev> ([OpenAPI](https://atlas-prism-api.fly.dev/docs)) |
 
-Sign up on the site, then: create a project → connect your N-ATLAS endpoint →
-import or create a test suite → run it → inspect the failures → export the
-report. Each account only ever sees its own projects.
+Sign up on the site, then:
+
+1. **Create a project and paste your application's system prompt** — the
+   instructions and rules your own assistant runs with, including anything it
+   must never reveal.
+2. **Connect your N-ATLAS endpoint** and verify it.
+3. **Author test cases, or import a suite JSON** — Guard for reliability,
+   Shield for bounded adversarial tests.
+4. **Run them.** Prism sends your application's instructions ahead of every
+   case, so Guard measures adherence to *your* requirements and Shield tries to
+   override *your* rules.
+5. **Inspect each failure and export the evidence.**
+
+That is the point of step 1: without it you are benchmarking the base model,
+which a developer cannot act on. With it, every failure is in something you own
+and can fix. Each account only ever sees its own projects.
 
 ## Status: the integration is live and verified
 

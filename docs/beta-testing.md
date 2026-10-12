@@ -71,15 +71,12 @@ them apart.
 ## Roadmap beyond V0.1
 
 V0.1 is scoped as one working evaluation pipeline demonstrating three
-capabilities. The following are the next increments, in the order they add the
-most value:
+capabilities. Two items from this roadmap have since shipped — **application
+profiles**, so a project is evaluated as the developer's own assistant rather
+than as the base model, and the **per-case test editor** over
+`POST /test-cases` and `PATCH /test-cases/{id}`. What remains, in the order it
+adds the most value:
 
-- **Per-case test editor.** `POST /test-cases` and `PATCH /test-cases/{id}` are
-  implemented and documented in [api-contract.md](api-contract.md); V0.5 adds
-  the editing surface over them, alongside the JSON import already shipped.
-- **Application profiles.** A system prompt and policy defined once per project
-  and applied to every run, so a team evaluates the assistant they built rather
-  than the base model — and Shield attempts to override *their* rules.
 - **Run-to-run comparison.** Each run already stores an immutable snapshot of
   its configuration, which is what a regression view needs: show which cases
   changed status after a prompt or model change. This is the basis of the

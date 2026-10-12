@@ -29,7 +29,8 @@ from app.db.session import SessionLocal
 from app.evaluation.scoring import (
     SCORING_VERSION, UnknownEvaluator, consistency, score,
 )
-from app.models import InferenceTrace, ModelConnection, RunCase, SecurityFinding, TestCase, TestRun, TestSuite
+from app.models import (InferenceTrace, ModelConnection, Project, RunCase, SecurityFinding,
+                        TestCase, TestRun, TestSuite)
 
 TERMINAL_RUN_STATES = {"completed", "partially_completed", "failed", "cancelled"}
 CONSISTENCY_EVALUATOR = "consistency"
@@ -39,10 +40,18 @@ def _utcnow() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
 
-def snapshot_case(case: TestCase, suite: TestSuite) -> dict[str, Any]:
-    """Immutable copy of the case as launched. Never contains a credential."""
+def snapshot_case(
+    case: TestCase, suite: TestSuite, app_system_prompt: str | None = None
+) -> dict[str, Any]:
+    """Immutable copy of the case as launched. Never contains a credential.
+
+    `app_system_prompt` is the project's application profile at launch time.
+    It is captured here, not read live, so editing the profile afterwards
+    cannot change what a historical run reports.
+    """
     return {
         "test_case_id": str(case.id),
+        "app_system_prompt": app_system_prompt or None,
         "name": case.name,
         "suite_id": str(suite.id),
         "suite_name": suite.name,
@@ -107,11 +116,16 @@ def create_run(
     db.add(run)
     db.flush()
 
+    # The application profile is read once, here, and frozen into every case
+    # snapshot alongside the test itself.
+    project = db.get(Project, project_id)
+    app_prompt = (project.app_system_prompt or "").strip() or None if project else None
+
     for case, suite in cases:
         db.add(RunCase(
             run_id=run.id,
             test_case_id=case.id,
-            case_snapshot=snapshot_case(case, suite),
+            case_snapshot=snapshot_case(case, suite, app_prompt),
             state="queued",
         ))
     db.commit()
@@ -158,6 +172,12 @@ async def _execute_case(
             db.commit()
 
             messages: list[dict[str, str]] = []
+            # The application's own instructions go FIRST, so a Shield case has
+            # real rules to try to override and a Guard case measures adherence
+            # to the developer's requirements. The case's own system prompt is
+            # layered after it and can add specifics.
+            if snap.get("app_system_prompt"):
+                messages.append({"role": "system", "content": snap["app_system_prompt"]})
             if snap.get("system_prompt"):
                 messages.append({"role": "system", "content": snap["system_prompt"]})
             messages.append({"role": "user", "content": snap["user_prompt"]})

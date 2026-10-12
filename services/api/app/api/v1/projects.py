@@ -16,7 +16,8 @@ from app.core.security import redact_secret
 from app.db.session import get_db
 from app.models import ModelConnection, Project, User
 from app.schemas.api import (
-    ConnectionCreate, ConnectionOut, ProjectCreate, ProjectOut, VerifyResponse,
+    ConnectionCreate, ConnectionOut, ProjectCreate, ProjectOut, ProjectUpdate,
+    VerifyResponse,
 )
 
 router = APIRouter(tags=["projects"])
@@ -35,7 +36,12 @@ def create_project(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> Project:
-    project = Project(owner_id=user.id, name=body.name.strip(), description=body.description)
+    project = Project(
+        owner_id=user.id,
+        name=body.name.strip(),
+        description=body.description,
+        app_system_prompt=(body.app_system_prompt or "").strip() or None,
+    )
     db.add(project)
     db.commit()
     db.refresh(project)
@@ -49,6 +55,32 @@ def list_projects(
     return list(db.scalars(
         select(Project).where(Project.owner_id == user.id).order_by(Project.created_at.desc())
     ).all())
+
+
+@router.patch("/projects/{project_id}", response_model=ProjectOut)
+def update_project(
+    project_id: uuid.UUID,
+    body: ProjectUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> Project:
+    """Edit a project, including its application profile.
+
+    Changing the profile affects FUTURE runs only. Every run freezes the
+    profile it executed with into each case snapshot, so historical results
+    stay reproducible.
+    """
+    project = owned_project(project_id, db, user)
+    data = body.model_dump(exclude_unset=True)
+    if "name" in data and data["name"]:
+        project.name = data["name"].strip()
+    if "description" in data:
+        project.description = data["description"]
+    if "app_system_prompt" in data:
+        project.app_system_prompt = (data["app_system_prompt"] or "").strip() or None
+    db.commit()
+    db.refresh(project)
+    return project
 
 
 @router.post("/connections", response_model=ConnectionOut, status_code=201)

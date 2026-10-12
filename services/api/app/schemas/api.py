@@ -34,12 +34,26 @@ class UserOut(ORMModel):
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=5000)
+    # The application under test: your assistant's own system prompt and rules.
+    # Layered beneath every test case, so results describe YOUR application
+    # rather than the base model. Optional -- leave empty to evaluate the model
+    # directly.
+    app_system_prompt: str | None = Field(default=None, max_length=20000)
+
+
+class ProjectUpdate(BaseModel):
+    """Partial update. Only supplied fields change."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    app_system_prompt: str | None = Field(default=None, max_length=20000)
 
 
 class ProjectOut(ORMModel):
     id: uuid.UUID
     name: str
     description: str | None
+    app_system_prompt: str | None
     owner_id: uuid.UUID
     created_at: dt.datetime
 

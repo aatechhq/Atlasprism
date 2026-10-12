@@ -1,4 +1,4 @@
-export type Project = { id: string; name: string; description: string | null; owner_id: string; created_at: string };
+export type Project = { id: string; name: string; description: string | null; app_system_prompt: string | null; owner_id: string; created_at: string };
 export type Connection = { id: string; project_id: string; provider: string; endpoint: string; model_id: string; verification_state: string; verification_detail: string | null; verified_at: string | null; created_at: string; credential: string };
 export type VerifyResult = { connection_id: string; verified: boolean; state: string; detail: string; outcome: string; model_id: string | null; latency_ms: number | null; upstream_status: number | null; response_excerpt: string | null; checked_at: string };
 export type Suite = { id: string; project_id: string; name: string; engine: "guard" | "shield"; version: number; description: string | null; created_at: string; case_count: number };

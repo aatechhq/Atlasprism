@@ -59,6 +59,13 @@ class Project(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    # The application under test: the system prompt and rules the developer's
+    # own assistant runs with. Prism layers this beneath every test case, so
+    # Guard measures adherence to THESE instructions and Shield attempts to
+    # override THESE rules -- rather than evaluating the base model alone.
+    # Nullable and empty by default: an empty profile changes nothing, so
+    # existing suites and historical runs behave exactly as before.
+    app_system_prompt: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[dt.datetime] = _created()
     updated_at: Mapped[dt.datetime] = _updated()
 
