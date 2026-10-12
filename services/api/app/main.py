@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.v1 import auth, projects, runs, suites
+from app.api.v1 import auth, projects, runs, suites, teams
 from app.core.config import settings
 from app.evaluation.runner import recover_interrupted_runs
 
@@ -50,7 +50,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-for r in (auth.router, projects.router, suites.router, runs.router):
+for r in (auth.router, projects.router, suites.router, runs.router, teams.router):
     app.include_router(r, prefix=API_PREFIX)
 
 

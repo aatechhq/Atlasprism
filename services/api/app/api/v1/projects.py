@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import current_user, owned_connection, owned_project
+from app.api.deps import (administrable_project, current_user, owned_connection,
+                          owned_project, writable_project)
 from app.connectors.generic import GenericHttpConnector
 from app.connectors.natlas import NatlasConnector
 from app.core import netguard, ownership
@@ -75,7 +76,7 @@ def update_project(
     profile it executed with into each case snapshot, so historical results
     stay reproducible.
     """
-    project = owned_project(project_id, db, user)
+    project = administrable_project(project_id, db, user)
     data = body.model_dump(exclude_unset=True)
     if "name" in data and data["name"]:
         project.name = data["name"].strip()
@@ -113,7 +114,7 @@ def create_connection(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ) -> ConnectionOut:
-    owned_project(body.project_id, db, user)
+    writable_project(body.project_id, db, user)
     endpoint = (body.endpoint or settings.natlas_base_url or "").rstrip("/")
     if not endpoint:
         raise BadRequest(
@@ -183,7 +184,7 @@ def create_verification(
     Returns a token to publish, by DNS TXT or as a file. Nothing is verified
     yet: call the check endpoint once the token is live.
     """
-    owned_project(body.project_id, db, user)
+    writable_project(body.project_id, db, user)
     host = (body.host or "").strip().lower().removeprefix("https://").removeprefix("http://")
     host = host.split("/")[0].split(":")[0]
     if not host or "." not in host:

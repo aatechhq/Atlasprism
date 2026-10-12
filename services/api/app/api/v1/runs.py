@@ -9,7 +9,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.api.deps import current_user, owned_connection, owned_project, owned_run
+from app.api.deps import (current_user, owned_connection, owned_project, owned_run,
+                          writable_project)
 from app.api.v1.projects import connector_for
 from app.core.errors import BadRequest
 from app.db.session import get_db
@@ -45,7 +46,7 @@ def create_run(
     Durability is limited by design (see runner docstring): execution is an
     in-process background task, not a durable queue.
     """
-    owned_project(body.project_id, db, user)
+    writable_project(body.project_id, db, user)
     conn = owned_connection(body.connection_id, db, user)
     if conn.project_id != body.project_id:
         raise BadRequest("Connection does not belong to that project.")

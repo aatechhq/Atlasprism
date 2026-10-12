@@ -58,6 +58,11 @@ class Project(Base):
     owner_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    # When set, members of this organisation can reach the project according
+      # to their role. When null, only the owner can.
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), index=True
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     # The application under test: the system prompt and rules the developer's
@@ -285,6 +290,123 @@ class SecurityFinding(Base):
     created_at: Mapped[dt.datetime] = _created()
 
     run_case: Mapped[RunCase] = relationship(back_populates="findings")
+
+
+class Organization(Base):
+    """A team. Projects may belong to one, and membership grants access."""
+
+    __tablename__ = "organizations"
+
+    id: Mapped[uuid.UUID] = _pk()
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    created_at: Mapped[dt.datetime] = _created()
+
+    memberships: Mapped[list["Membership"]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
+
+
+class Membership(Base):
+    """One person's role in one organisation.
+
+    Roles, least to most: viewer reads; member additionally runs evaluations
+    and authors suites; admin additionally edits the project and manages
+    members; owner is an admin who cannot be removed by another admin.
+    """
+
+    __tablename__ = "memberships"
+
+    id: Mapped[uuid.UUID] = _pk()
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member")
+    created_at: Mapped[dt.datetime] = _created()
+
+    organization: Mapped[Organization] = relationship(back_populates="memberships")
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "user_id", name="uq_membership_org_user"),
+        CheckConstraint("role IN ('owner','admin','member','viewer')", name="ck_membership_role"),
+    )
+
+    WRITE_ROLES = ("owner", "admin", "member")
+    ADMIN_ROLES = ("owner", "admin")
+
+    @property
+    def can_write(self) -> bool:
+        return self.role in self.WRITE_ROLES
+
+    @property
+    def can_administer(self) -> bool:
+        return self.role in self.ADMIN_ROLES
+
+
+class Dataset(Base):
+    """A reusable, versioned library of evaluation cases.
+
+    A suite belongs to one project; a dataset does not. That is the whole
+    point: author a Shield library once and instantiate it into every project
+    that needs it, without copying JSON between them by hand.
+    """
+
+    __tablename__ = "datasets"
+
+    id: Mapped[uuid.UUID] = _pk()
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # When set, every member of the organisation may read and instantiate it.
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("organizations.id", ondelete="SET NULL"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    engine: Mapped[str] = mapped_column(String(20), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = _created()
+    updated_at: Mapped[dt.datetime] = _updated()
+
+    versions: Mapped[list["DatasetVersion"]] = relationship(
+        back_populates="dataset", cascade="all, delete-orphan",
+        order_by="DatasetVersion.version",
+    )
+
+    __table_args__ = (
+        CheckConstraint("engine IN ('guard','shield')", name="ck_dataset_engine"),
+    )
+
+
+class DatasetVersion(Base):
+    """An immutable snapshot of a dataset's cases.
+
+    Versions are never edited. A change creates the next version, so a suite
+    instantiated from version 2 keeps meaning what it meant even after version
+    3 exists -- the same reasoning as the per-run case snapshot.
+    """
+
+    __tablename__ = "dataset_versions"
+
+    id: Mapped[uuid.UUID] = _pk()
+    dataset_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("datasets.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    cases: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = _created()
+
+    dataset: Mapped[Dataset] = relationship(back_populates="versions")
+
+    __table_args__ = (
+        UniqueConstraint("dataset_id", "version", name="uq_dataset_version"),
+    )
+
+    @property
+    def case_count(self) -> int:
+        return len(self.cases or [])
 
 
 class HostVerification(Base):

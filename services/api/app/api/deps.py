@@ -14,10 +14,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.errors import NotFound, Unauthorized
+from app.core.errors import Forbidden, NotFound, Unauthorized
 from app.core.security import decode_access_token, decode_neon_token
 from app.db.session import get_db
-from app.models import ModelConnection, Project, TestRun, TestSuite, User
+from app.models import Membership, ModelConnection, Project, TestRun, TestSuite, User
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -66,11 +66,64 @@ def current_user(
     return user
 
 
+def _membership(db: Session, project: Project, user: User) -> Membership | None:
+    if project.organization_id is None:
+        return None
+    return db.scalar(select(Membership).where(
+        Membership.organization_id == project.organization_id,
+        Membership.user_id == user.id,
+    ))
+
+
 def owned_project(project_id: uuid.UUID, db: Session, user: User) -> Project:
+    """READ access to a project.
+
+    The owner always has it. When a project belongs to an organisation, any
+    member of that organisation has it too, at any role -- `viewer` included.
+
+    A project the caller cannot reach returns 404, never 403, so the API does
+    not confirm that another tenant's id exists. That property is what the
+    isolation tests assert, and it must survive any change here.
+    """
     project = db.get(Project, project_id)
-    if project is None or project.owner_id != user.id:
+    if project is None:
         raise NotFound("Project not found.")
-    return project
+    if project.owner_id == user.id:
+        return project
+    if _membership(db, project, user) is not None:
+        return project
+    raise NotFound("Project not found.")
+
+
+def writable_project(project_id: uuid.UUID, db: Session, user: User) -> Project:
+    """WRITE access: create a connection, author a suite, launch a run.
+
+    Read access is not enough. A `viewer` can see results but cannot spend
+    inference, change the application profile, or author adversarial cases.
+    Refused with 403, not 404 -- at this point the caller has already proven
+    they may see the project, so there is nothing left to conceal.
+    """
+    project = owned_project(project_id, db, user)
+    if project.owner_id == user.id:
+        return project
+    m = _membership(db, project, user)
+    if m is not None and m.can_write:
+        return project
+    raise Forbidden(
+        "Your role on this project is read-only. A member, admin or owner can "
+        "make this change."
+    )
+
+
+def administrable_project(project_id: uuid.UUID, db: Session, user: User) -> Project:
+    """ADMIN access: edit the project itself, or manage who can reach it."""
+    project = owned_project(project_id, db, user)
+    if project.owner_id == user.id:
+        return project
+    m = _membership(db, project, user)
+    if m is not None and m.can_administer:
+        return project
+    raise Forbidden("Only an admin or the owner can change this.")
 
 
 def owned_connection(connection_id: uuid.UUID, db: Session, user: User) -> ModelConnection:

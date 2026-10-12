@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import current_user, owned_project, owned_suite
+from app.api.deps import current_user, owned_project, owned_suite, writable_project
 from app.core.errors import BadRequest, NotFound
 from app.db.session import get_db
 from app.evaluation.scoring import SCORERS
@@ -30,7 +30,7 @@ def _suite_out(suite: TestSuite) -> SuiteOut:
 def create_suite(
     body: SuiteCreate, db: Session = Depends(get_db), user: User = Depends(current_user)
 ) -> SuiteOut:
-    owned_project(body.project_id, db, user)
+    writable_project(body.project_id, db, user)
     suite = TestSuite(
         project_id=body.project_id, name=body.name.strip(),
         engine=body.engine, description=body.description,
@@ -114,6 +114,7 @@ def create_case(
     body: TestCaseCreate, db: Session = Depends(get_db), user: User = Depends(current_user)
 ) -> TestCase:
     suite = owned_suite(body.suite_id, db, user)
+    writable_project(suite.project_id, db, user)
     _validate_evaluator(body.evaluator_type, body.evaluator_config)
     case = TestCase(
         suite_id=suite.id, name=body.name.strip(), system_prompt=body.system_prompt,
@@ -136,7 +137,8 @@ def update_case(
     case = db.get(TestCase, case_id)
     if case is None:
         raise NotFound("Test case not found.")
-    owned_suite(case.suite_id, db, user)
+    suite = owned_suite(case.suite_id, db, user)
+    writable_project(suite.project_id, db, user)
 
     data = body.model_dump(exclude_unset=True)
     if not data:

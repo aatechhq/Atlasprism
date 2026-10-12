@@ -58,6 +58,7 @@ class ProjectOut(ORMModel):
     id: uuid.UUID
     name: str
     description: str | None
+    organization_id: uuid.UUID | None
     app_system_prompt: str | None
     gate_min_pass_rate: float | None
     gate_max_critical_findings: int | None
@@ -66,6 +67,69 @@ class ProjectOut(ORMModel):
 
 
 # --- connections ---
+class OrganizationCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+
+
+class OrganizationOut(ORMModel):
+    id: uuid.UUID
+    name: str
+    created_at: dt.datetime
+    role: str | None = None          # the caller's own role
+    member_count: int | None = None
+
+
+class MemberAdd(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: Literal["owner", "admin", "member", "viewer"] = "member"
+
+
+class MemberOut(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    role: str
+    created_at: dt.datetime
+
+
+class DatasetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    engine: Literal["guard", "shield"]
+    description: str | None = None
+    organization_id: uuid.UUID | None = None
+    cases: list[dict[str, Any]] = Field(min_length=1)
+
+
+class DatasetVersionCreate(BaseModel):
+    cases: list[dict[str, Any]] = Field(min_length=1)
+    notes: str | None = None
+
+
+class DatasetVersionOut(ORMModel):
+    id: uuid.UUID
+    version: int
+    notes: str | None
+    case_count: int
+    created_at: dt.datetime
+
+
+class DatasetOut(ORMModel):
+    id: uuid.UUID
+    name: str
+    engine: str
+    description: str | None
+    owner_id: uuid.UUID
+    organization_id: uuid.UUID | None
+    created_at: dt.datetime
+    latest_version: int | None = None
+    versions: list[DatasetVersionOut] = Field(default_factory=list)
+
+
+class DatasetInstantiate(BaseModel):
+    project_id: uuid.UUID
+    version: int | None = None       # default: the latest
+    suite_name: str | None = None    # default: the dataset name
+
+
 class HostVerificationCreate(BaseModel):
     project_id: uuid.UUID
     host: str = Field(min_length=1, max_length=255)
