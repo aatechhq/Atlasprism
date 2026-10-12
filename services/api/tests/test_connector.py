@@ -214,3 +214,54 @@ async def test_health_is_never_verification():
     assert out["reachable"] is True
     assert "not integration evidence" in out["note"]
     assert "verified" not in out
+
+
+# --- connector_for: the single provider -> connector mapping ---------------
+# This mapping was briefly self-recursive, which made every N-ATLAS verify and
+# every run return 500 in production while /health stayed green. A health
+# check cannot catch it; these tests can.
+
+
+class _Conn:
+    """The two fields connector_for reads. Avoids a database for a pure map."""
+
+    def __init__(self, provider, endpoint=None, model_id=None):
+        self.provider = provider
+        self.endpoint = endpoint
+        self.model_id = model_id
+
+
+def test_connector_for_natlas_returns_the_natlas_connector():
+    from app.api.v1.projects import connector_for
+    from app.connectors.natlas import NatlasConnector
+
+    c = connector_for(_Conn("natlas", None, None))
+    assert isinstance(c, NatlasConnector)
+
+
+def test_connector_for_natlas_does_not_recurse_with_an_explicit_endpoint():
+    from app.api.v1.projects import connector_for
+    from app.connectors.natlas import NatlasConnector
+
+    c = connector_for(_Conn("natlas", "https://example.invalid", "some/model"))
+    assert isinstance(c, NatlasConnector)
+    assert c.base_url == "https://example.invalid"
+    assert c.model_id == "some/model"
+
+
+def test_connector_for_an_unknown_provider_still_returns_a_connector():
+    """A provider string we do not recognise must not recurse or crash."""
+    from app.api.v1.projects import connector_for
+    from app.connectors.natlas import NatlasConnector
+
+    assert isinstance(connector_for(_Conn("something_else")), NatlasConnector)
+
+
+def test_connector_for_openai_compatible_sends_no_credential():
+    """Host ownership entitles a developer to be tested, not to our key."""
+    from app.api.v1.projects import connector_for
+    from app.connectors.generic import GenericHttpConnector
+
+    c = connector_for(_Conn("openai_compatible", "https://app.example.com", "m"))
+    assert isinstance(c, GenericHttpConnector)
+    assert getattr(c, "_api_key", None) in (None, "")

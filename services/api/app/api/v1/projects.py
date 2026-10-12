@@ -113,7 +113,10 @@ def connector_for(conn: ModelConnection):
             api_key=None,
             timeout_ms=settings.natlas_timeout_ms,
         )
-    return connector_for(conn)
+    # Every other provider is the N-ATLAS gateway. `None` for endpoint or
+    # model id means "use the configured default", which the connector
+    # resolves itself -- so a connection saved with blank fields still works.
+    return NatlasConnector(base_url=conn.endpoint, model_id=conn.model_id)
 
 
 @router.post("/connections", response_model=ConnectionOut, status_code=201)
