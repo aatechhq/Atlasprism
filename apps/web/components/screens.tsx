@@ -1,10 +1,113 @@
 "use client";
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Activity, ArrowRight, Boxes, Download, FileDown, FolderPlus, Gauge, Play, Plus, RefreshCw, ShieldCheck } from "lucide-react";
+import { Activity, ArrowRight, Boxes, Check, Download, FileDown, FolderPlus, Gauge, Play, Plus, RefreshCw, ShieldCheck } from "lucide-react";
 import { api, download } from "@/lib/api";
-import type { Connection, Metrics, Project, Results, Run, RunCase, Suite, SuiteDetail, TestCase, TracePage, VerifyResult } from "@/lib/types";
+import type { Connection, Metrics, Project, ReleaseGate, Results, Run, RunCase, Suite, SuiteDetail, TestCase, TracePage, VerifyResult } from "@/lib/types";
 import { Empty, Notice, PageHead, StatusBadge, useWorkspace } from "@/components/workspace";
+
+export function RefinedDashboardScreen(){
+  const{project,loading,error}=useWorkspace();
+  const runs=useLoad<Run[]>(project?`/runs?project_id=${project.id}`:null);
+  const metrics=useLoad<Metrics>(project?`/metrics/summary?project_id=${project.id}`:null);
+  const connections=useLoad<Connection[]>(project?`/connections?project_id=${project.id}`:null);
+  const suites=useLoad<Suite[]>(project?`/suites?project_id=${project.id}`:null);
+  const completed=runs.data?.filter(run=>run.status==="completed")??[];
+  const latest=completed[0]??null;
+  const gate=useLoad<ReleaseGate>(latest?`/runs/${latest.id}/gate`:null);
+  const passed=(runs.data??[]).reduce((sum,run)=>sum+run.passed_count,0);
+  const failed=(runs.data??[]).reduce((sum,run)=>sum+run.failed_count,0);
+  const scored=passed+failed;
+  const inferenceErrors=(runs.data??[]).reduce((sum,run)=>sum+run.error_count,0);
+  const profileReady=Boolean(project?.app_system_prompt?.trim());
+  const connectionReady=Boolean(connections.data?.some(connection=>connection.verification_state==="verified"));
+  const guardReady=Boolean(suites.data?.some(suite=>suite.engine==="guard"&&suite.case_count>0));
+  const shieldReady=Boolean(suites.data?.some(suite=>suite.engine==="shield"&&suite.case_count>0));
+  const runReady=Boolean(latest);
+  const readyCount=[profileReady,connectionReady,guardReady&&shieldReady,runReady].filter(Boolean).length;
+  const next=!profileReady?{href:"/projects",label:"Define application"}:!connectionReady?{href:"/projects",label:"Verify N-ATLAS"}:!(guardReady&&shieldReady)?{href:"/suites",label:"Build test suites"}:!runReady?{href:"/runs",label:"Run evaluation"}:{href:`/runs/${latest!.id}`,label:"Inspect latest run"};
+
+  return <>
+    <PageHead eyebrow="Evaluation workspace" title={project?.name??"Overview"} description="Move from application rules to a reviewable release decision without losing the evidence behind it." action={<Link className="btn btn-primary" href={next.href}>{next.label}<ArrowRight size={16}/></Link>}/>
+    {error&&<Notice error>{error}</Notice>}
+    {!loading&&!project?<Empty title="Create a project to begin" text="Define the application you are testing, then connect N-ATLAS and build its evaluation record." action={<Link href="/projects" className="btn btn-primary"><FolderPlus size={16}/>Create project</Link>}/>:<>
+      <div className="dashboard-lead">
+        <section className="card readiness-card">
+          <div className="card-head"><div><p className="section-label">Evaluation path</p><h2>{readyCount} of 4 stages ready</h2></div><span className="readiness-count">{readyCount}/4</span></div>
+          <div className="readiness-list">
+            <ReadinessStep ready={profileReady} title="Application defined" text={profileReady?"Your instructions are frozen into each run.":"Add the application prompt and rules you want to test."} href="/projects"/>
+            <ReadinessStep ready={connectionReady} title="N-ATLAS verified" text={connectionReady?"A genuine authenticated inference call has succeeded.":"Save and verify the authorized model endpoint."} href="/projects"/>
+            <ReadinessStep ready={guardReady&&shieldReady} title="Guard and Shield prepared" text={guardReady&&shieldReady?"Both evaluation lenses contain runnable cases.":"Create or import quality and security test cases."} href="/suites"/>
+            <ReadinessStep ready={runReady} title="Evidence recorded" text={runReady?`Latest completed run ${latest!.id.slice(0,8)} is ready to inspect.`:"Run the prepared suites and preserve their traces."} href={runReady?`/runs/${latest!.id}`:"/runs"}/>
+          </div>
+        </section>
+        <ReleaseDecision latest={latest} gate={gate}/>
+      </div>
+      <div className="grid metrics dashboard-metrics">
+        <Metric label="Completed runs" value={String(completed.length)} note={`${runs.data?.length??0} total recorded`}/>
+        <Metric label="Observed pass rate" value={percent(scored?passed/scored:null)} note={scored?`Across ${scored} scored cases`:"No scored cases"} tone="guard"/>
+        <Metric label="Inference errors" value={String(inferenceErrors)} note="Excluded from the pass rate" tone="shield"/>
+        <Metric label="p95 latency" value={metrics.data?.latency_ms.p95!=null?`${Math.round(metrics.data.latency_ms.p95)} ms`:"—"} note={`${metrics.data?.latency_ms.sample_count??0} successful attempts`} tone="pulse"/>
+      </div>
+      <section className="card recent-runs"><div className="card-head"><div><p className="section-label">Run history</p><h2>Recent evaluations</h2></div><Link href="/results" className="btn btn-secondary">View results <ArrowRight size={15}/></Link></div>{runs.loading?<p className="hint">Loading recorded runs...</p>:runs.error?<Notice error>{runs.error}</Notice>:!runs.data?.length?<Empty title="No evaluation runs yet" text="Select a verified connection and at least one suite to run your first bounded test." action={<Link href="/runs" className="btn btn-primary">Configure a run</Link>}/>:<RunTable runs={runs.data.slice(0,8)}/>}</section>
+    </>}
+  </>;
+}
+
+function ReadinessStep({ready,title,text,href}:{ready:boolean;title:string;text:string;href:string}){
+  return <Link className={`readiness-step ${ready?"ready":"pending"}`} href={href}><span className="readiness-icon">{ready?<Check size={15}/>:<span/>}</span><span><strong>{title}</strong><small>{text}</small></span><ArrowRight className="readiness-arrow" size={16}/></Link>;
+}
+
+function ReleaseDecision({latest,gate}:{latest:Run|null;gate:ReturnType<typeof useLoad<ReleaseGate>>}){
+  if(!latest)return <section className="card release-card"><p className="section-label">Release decision</p><h2>Waiting for a completed run</h2><p className="release-copy">Once evidence exists, Prism can apply your project thresholds without confusing a policy result with a safety guarantee.</p><Link className="btn btn-secondary" href="/runs">Configure a run</Link></section>;
+  if(gate.loading)return <section className="card release-card"><p className="section-label">Release decision</p><h2>Reading the latest run</h2><p className="hint">Loading declared thresholds and observed evidence...</p></section>;
+  if(gate.error)return <section className="card release-card"><p className="section-label">Release decision</p><h2>Decision unavailable</h2><Notice error>{gate.error}</Notice><Link className="btn btn-secondary" href={`/runs/${latest.id}`}>Inspect run</Link></section>;
+  const verdict=gate.data?.verdict??"inconclusive";
+  const title=verdict==="pass"?"Policy thresholds met":verdict==="block"?"Release policy blocked":verdict==="not_configured"?"Set your release policy":"Evidence is inconclusive";
+  const copy=gate.data?.notes??(verdict==="pass"?"The latest run met this project's declared checks. This is not a general safety approval.":verdict==="block"?"At least one declared threshold was not met. Inspect the observed values before release.":"A completed run needs scored evidence before Prism can reach a decision.");
+  const action=verdict==="not_configured"?{href:"/projects",label:"Configure policy"}:{href:`/runs/${latest.id}`,label:"Inspect evidence"};
+  return <section className={`card release-card verdict-${verdict}`}><div className="release-top"><div><p className="section-label">Release decision</p><h2>{title}</h2></div><StatusBadge status={verdict}/></div><p className="release-copy">{copy}</p>{gate.data?.checks.length?<div className="gate-checks">{gate.data.checks.slice(0,2).map(check=><div key={check.check}><span>{check.check.replaceAll("_"," ")}</span><strong>{formatGateCheck(check.observed,check.threshold)}</strong></div>)}</div>:null}{gate.data?.limitations.length?<div className="gate-limitations"><strong>Decision limits</strong><ul>{gate.data.limitations.map(limit=><li key={limit}>{limit}</li>)}</ul></div>:null}<Link className="btn btn-secondary" href={action.href}>{action.label} <ArrowRight size={15}/></Link></section>;
+}
+
+function formatGateCheck(observed:number|null,threshold:number){
+  const value=(number:number)=>number<=1?`${(number*100).toFixed(1)}%`:String(number);
+  return observed==null?"No observation":`${value(observed)} / ${value(threshold)}`;
+}
+
+export function ProjectProfileSettings(){
+  const{project,refresh}=useWorkspace();
+  const[busy,setBusy]=useState(false);
+  const[message,setMessage]=useState("");
+  if(!project)return null;
+  async function update(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();
+    if(!project)return;
+    const form=e.currentTarget;
+    const data=new FormData(form);
+    const minRate=String(data.get("gate_min_pass_rate")??"").trim();
+    const maxCritical=String(data.get("gate_max_critical_findings")??"").trim();
+    setBusy(true);setMessage("");
+    try{
+      await api<Project>(`/projects/${project.id}`,{method:"PATCH",body:JSON.stringify({
+        name:data.get("name"),description:data.get("description")||null,
+        app_system_prompt:data.get("app_system_prompt")||null,
+        gate_min_pass_rate:minRate===""?null:Number(minRate)/100,
+        gate_max_critical_findings:maxCritical===""?null:Number(maxCritical),
+      })});
+      await refresh();setMessage("Application profile and release policy saved.");
+    }catch(error){setMessage((error as Error).message)}finally{setBusy(false)}
+  }
+  return <section className="card project-settings">
+    <div className="settings-copy"><p className="section-label">Application under test</p><h2>Profile and release policy</h2><p>Prism applies these instructions before every case. Each run keeps an immutable copy, so editing the profile never rewrites historical evidence.</p><div className="policy-note"><strong>Thresholds are your policy.</strong><span>A passing gate is not a general safety or accuracy guarantee.</span></div></div>
+    <form className="form" onSubmit={update} key={project.id}>
+      <div className="form-row"><div className="field"><label htmlFor="profile-name">Project name</label><input id="profile-name" className="input" name="name" defaultValue={project.name} required maxLength={200}/></div><div className="field"><label htmlFor="profile-description">Description</label><input id="profile-description" className="input" name="description" defaultValue={project.description??""} maxLength={5000}/></div></div>
+      <div className="field"><label htmlFor="profile-prompt">Application system prompt</label><textarea id="profile-prompt" className="textarea" name="app_system_prompt" defaultValue={project.app_system_prompt??""} maxLength={20000} style={{minHeight:150}} placeholder="Describe your assistant's role, boundaries, and rules."/><p className="hint">Guard measures adherence to these rules. Shield attempts to override them using bounded, pre-authored tests.</p></div>
+      <div className="form-row"><div className="field"><label htmlFor="gate-rate">Minimum pass rate (%)</label><input id="gate-rate" className="input" name="gate_min_pass_rate" type="number" min="0" max="100" step="0.1" defaultValue={project.gate_min_pass_rate==null?"":project.gate_min_pass_rate*100} placeholder="Not configured"/></div><div className="field"><label htmlFor="gate-critical">Maximum critical findings</label><input id="gate-critical" className="input" name="gate_max_critical_findings" type="number" min="0" step="1" defaultValue={project.gate_max_critical_findings??""} placeholder="Not configured"/></div></div>
+      {message&&<Notice error={!message.includes("saved")}>{message}</Notice>}
+      <button className="btn btn-primary" disabled={busy}>{busy?"Saving...":"Save profile and policy"}</button>
+    </form>
+  </section>;
+}
 
 function useLoad<T>(path: string | null, refreshKey = 0) { const [data,setData]=useState<T|null>(null);const [loading,setLoading]=useState(false);const [error,setError]=useState("");useEffect(()=>{if(!path){setData(null);return}let active=true;setLoading(true);setError("");api<T>(path).then(v=>active&&setData(v)).catch(e=>active&&setError(e.message)).finally(()=>active&&setLoading(false));return()=>{active=false}},[path,refreshKey]);return{data,loading,error}; }
 const fmt=(value:string|null|undefined)=>value?new Intl.DateTimeFormat("en-NG",{dateStyle:"medium",timeStyle:"short"}).format(new Date(value)):"—";

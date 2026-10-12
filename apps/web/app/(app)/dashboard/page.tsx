@@ -1,2 +1,2 @@
-import { DashboardScreen } from "@/components/screens";
-export default function Page(){return <DashboardScreen/>}
+import { RefinedDashboardScreen } from "@/components/screens";
+export default function Page(){return <RefinedDashboardScreen/>}

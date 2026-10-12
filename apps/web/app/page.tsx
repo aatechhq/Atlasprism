@@ -1,8 +1,31 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Check, Gauge, LockKeyhole, ScanSearch } from "lucide-react";
+import { ArrowRight, Check, Gauge, GitCompare, Languages, LockKeyhole, ScanSearch } from "lucide-react";
 
-const steps = ["Connect", "Test", "Understand", "Reproduce", "Export"];
+const steps = ["Define", "Connect", "Evaluate", "Compare", "Release"];
+
+const decisions = [
+  {
+    title: "Compare what changed",
+    text: "Read case-by-case regressions and improvements with confidence warnings when sampled generations can flip.",
+    icon: GitCompare,
+  },
+  {
+    title: "Retest the misses",
+    text: "Run only failed or errored cases again, then compare the new evidence with the original run.",
+    icon: ScanSearch,
+  },
+  {
+    title: "Apply your release policy",
+    text: "Evaluate pass-rate and critical-finding thresholds without presenting a policy decision as a safety guarantee.",
+    icon: LockKeyhole,
+  },
+  {
+    title: "Understand language performance",
+    text: "Inspect outcomes and latency by each test case's declared language, with sample counts kept visible.",
+    icon: Languages,
+  },
+];
 
 export default function HomePage() {
   return (
@@ -21,13 +44,12 @@ export default function HomePage() {
       <section className="landing-hero">
         <div className="landing-hero-copy">
           <p className="landing-kicker">Independent N-ATLAS assurance</p>
-          <h1>See what your model does. Keep the evidence.</h1>
-          <p className="landing-intro">Test quality, security, and performance with a reproducible record built for review.</p>
+          <h1>Test your AI application. Keep the evidence.</h1>
+          <p className="landing-intro">Evaluate quality, security, and latency against your own rules, then compare changes before release.</p>
           <div className="landing-actions">
-            <Link className="btn btn-primary" href="/signup">Start evaluating <ArrowRight size={16} /></Link>
-            <Link className="btn btn-secondary" href="/login">Open workspace</Link>
+            <Link className="btn btn-primary" href="/signup">Create account <ArrowRight size={16} /></Link>
+            <Link className="btn btn-secondary" href="/login">Sign in</Link>
           </div>
-          <p className="landing-independence">Independent evaluation tooling. Not an official N-ATLAS service.</p>
         </div>
         <div className="prism-stage" aria-hidden="true">
           <div className="prism-orbit prism-orbit-one" />
@@ -39,40 +61,58 @@ export default function HomePage() {
       </section>
 
       <section className="workflow-strip" aria-label="Evaluation workflow">
-        <p>One traceable workflow</p>
-        <ol>{steps.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span>{step}</li>)}</ol>
+        <div>
+          <strong>One traceable path</strong>
+          <span>Independent tooling, not an official N-ATLAS service.</span>
+        </div>
+        <ol>{steps.map(step => <li key={step}>{step}</li>)}</ol>
       </section>
 
       <section className="landing-system">
         <div className="system-heading">
-          <p className="landing-kicker">Three evaluation lenses</p>
-          <h2>A clear reading of model behavior.</h2>
-          <p>Each engine produces inspectable results without collapsing uncertainty into a decorative score.</p>
+          <h2>Three lenses. One evaluation record.</h2>
+          <p>Every score stays connected to the application rules, model response, latency, and test definition that produced it.</p>
         </div>
         <div className="engine-grid">
           <article className="engine-card guard-card">
-            <span className="engine-index">01 / Guard</span><ScanSearch />
-            <h3>Quality under pressure</h3><p>Test task behavior against explicit cases and retain the model response behind every result.</p>
+            <span className="engine-index">Guard</span><ScanSearch />
+            <h3>Quality against your rules</h3><p>Apply your application prompt before every case and retain the model response behind each result.</p>
           </article>
           <article className="engine-card shield-card">
-            <span className="engine-index">02 / Shield</span><LockKeyhole />
-            <h3>Security you can inspect</h3><p>Probe defined risks, record findings, and keep errors outside the pass-rate calculation.</p>
+            <span className="engine-index">Shield</span><LockKeyhole />
+            <h3>Findings you can act on</h3><p>Inspect bounded security outcomes with severity rationale, redacted evidence, and mitigation guidance.</p>
           </article>
           <article className="engine-card pulse-card">
-            <span className="engine-index">03 / Pulse</span><Gauge />
-            <h3>Performance in context</h3><p>Read latency with its sample count, model identity, and connection evidence attached.</p>
+            <span className="engine-index">Pulse</span><Gauge />
+            <h3>Performance with context</h3><p>Read latency, trace outcomes, model identity, and language-level sample counts from persisted calls.</p>
           </article>
         </div>
       </section>
 
+      <section className="decision-section">
+        <div className="decision-intro">
+          <p className="landing-kicker">After the first run</p>
+          <h2>Turn evaluation into a release decision.</h2>
+          <p>Prism helps a developer answer the practical question: did the change improve the application, and is the evidence complete enough to proceed?</p>
+        </div>
+        <div className="decision-list">
+          {decisions.map(({ title, text, icon: Icon }) => (
+            <article className="decision-row" key={title}>
+              <Icon aria-hidden="true" />
+              <div><h3>{title}</h3><p>{text}</p></div>
+            </article>
+          ))}
+        </div>
+      </section>
+
       <section className="evidence-band">
-        <div><p className="landing-kicker">The evidence ledger</p><h2>Every conclusion has a path back to the run.</h2></div>
+        <div><h2>Every conclusion has a path back to the run.</h2><p>Versioned suites, immutable snapshots, response excerpts, traces, and exports keep the result reviewable.</p></div>
         <ul>
-          <li><Check size={17} /> Versioned suites and scoring</li>
-          <li><Check size={17} /> Response excerpts and latency</li>
-          <li><Check size={17} /> Exportable run records</li>
+          <li><Check size={17} /> Errors stay outside the pass rate</li>
+          <li><Check size={17} /> Threshold checks show observed values</li>
+          <li><Check size={17} /> JSON and CSV evidence exports</li>
         </ul>
-        <Link className="btn btn-primary" href="/signup">Create your workspace <ArrowRight size={16} /></Link>
+        <Link className="btn btn-primary" href="/signup">Create account <ArrowRight size={16} /></Link>
       </section>
 
       <footer className="landing-footer"><span>ATLAS Prism</span><span>Evaluation assurance for N-ATLAS integrations</span></footer>

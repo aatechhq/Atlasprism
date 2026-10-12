@@ -1,4 +1,4 @@
-export type Project = { id: string; name: string; description: string | null; app_system_prompt: string | null; owner_id: string; created_at: string };
+export type Project = { id: string; name: string; description: string | null; app_system_prompt: string | null; gate_min_pass_rate: number | null; gate_max_critical_findings: number | null; owner_id: string; created_at: string };
 export type Connection = { id: string; project_id: string; provider: string; endpoint: string; model_id: string; verification_state: string; verification_detail: string | null; verified_at: string | null; created_at: string; credential: string };
 export type VerifyResult = { connection_id: string; verified: boolean; state: string; detail: string; outcome: string; model_id: string | null; latency_ms: number | null; upstream_status: number | null; response_excerpt: string | null; checked_at: string };
 export type Suite = { id: string; project_id: string; name: string; engine: "guard" | "shield"; version: number; description: string | null; created_at: string; case_count: number };
@@ -18,3 +18,11 @@ export type Metrics = {
 };
 export type ObservabilityTrace = { trace_id: string; run_case_id: string; attempt: number; outcome: string; upstream_status: number | null; latency_ms: number | null; model_id: string | null; endpoint: string; error_message: string | null; recorded_at: string | null };
 export type TracePage = { total: number; limit: number; offset: number; items: ObservabilityTrace[] };
+export type ReleaseGate = {
+  verdict: "pass" | "block" | "not_configured" | "inconclusive";
+  run_status: string;
+  checks: { check: string; threshold: number; observed: number | null; met: boolean; detail: string | null }[];
+  observed: { pass_rate: number | null; passed: number; failed: number; errors: number; scored_cases: number; findings_by_severity: Record<string, number>; pass_rate_definition: string };
+  limitations: string[];
+  notes: string | null;
+};
