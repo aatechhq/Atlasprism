@@ -4,7 +4,7 @@
 
 ```
                    ┌──────────────────────┐
-                   │  apps/web (UI)       │
+                   │  apps/web (frontend) │
                    │  Next.js frontend    │
                    └──────────┬───────────┘
                               │ HTTPS, JSON, Bearer JWT

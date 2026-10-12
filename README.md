@@ -212,7 +212,7 @@ not a bug.
 ## Licence
 
 [MIT](LICENSE) — chosen by the project owner on 2026-10-11. Copyright holder:
-AA Technologies (Azibaola Arikekpar Technologies).
+AA Technologies.
 
 ## Contributing
 

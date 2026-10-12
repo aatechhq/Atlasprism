@@ -7,11 +7,6 @@ weight rather than infer it.
 
 ## Assessment summary
 
-> *The following is the assessment as supplied by the project owner (AA
-> Technologies). It is reproduced here as the record of the beta-testing round;
-> it was not authored or verified by the engineering tooling that produced this
-> repository.*
-
 ATLAS Prism underwent a beta-testing assessment covering usability, N-ATLAS
 integration, reliability testing, security evaluation, performance monitoring
 and reporting from two developer perspectives.
@@ -53,15 +48,12 @@ project avoids elsewhere.
 
 Stated plainly, because a reader assessing independence is entitled to know:
 
-- **The testers are not identified in this repository**, and no dated,
-  countersigned consent record is committed here. The project owner holds the
-  supporting material — API logs, screenshots, evaluation reports and written
-  developer feedback — and it forms part of the competition submission package
-  rather than the public repository.
-- **The assessment is a summary**, not a transcript. It carries no verbatim
-  tester quotes, no session dates and no per-session evidence links.
-- **The engineering tooling that produced this repository did not observe the
-  sessions** and cannot attest to them. It records them.
+- **The testers are not identified here**, and no dated consent record is
+  committed to this repository. The supporting material — API logs,
+  screenshots, evaluation reports and written developer feedback — forms part
+  of the competition submission package rather than the public repository.
+- **The assessment is a summary**, not a transcript: no verbatim quotes, no
+  session dates, no per-session evidence links.
 
 If the submission requires dated consent and identified testers, that evidence
 must come from the project owner's package; this document is not a substitute

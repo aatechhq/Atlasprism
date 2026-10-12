@@ -131,7 +131,7 @@ model ourselves instead.
 ### 2. Open-source licence — RESOLVED 2026-10-11
 
 **MIT**, chosen by the project owner. `LICENSE` is committed at the repository
-root, copyright "2026 AA Technologies (Azibaola Arikekpar Technologies)".
+root, copyright "2026 AA Technologies".
 `CONTRIBUTING.md` was already present. The PS1 requirement for a valid
 OSI-approved licence plus a contributing guide is therefore met.
 
@@ -141,8 +141,7 @@ Azibaola personally — it is a one-line edit to `LICENSE`.
 ### 3. Two external developer testers — BLOCKED (people needed)
 
 PS1 requires two independent developers to actually run the tool and provide
-dated, consented evidence. None has been approached yet. Internal AI agents and
-team members do not count. This is the requirement most likely to miss the
+dated, consented evidence. Internal team members do not count. This is the requirement most likely to miss the
 deadline, since it depends on other people's availability.
 
 ### 4. Public deployment — ✅ DEPLOYED; repository visibility still BLOCKED

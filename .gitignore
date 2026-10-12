@@ -14,7 +14,7 @@ venv/
 *.pem
 *.key
 
-# Node / frontend (frontend scope)
+# Node / frontend
 node_modules/
 .next/
 out/

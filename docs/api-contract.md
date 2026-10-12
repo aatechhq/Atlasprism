@@ -1,6 +1,6 @@
 # API contract
 
-**Audience: the frontend (`apps/web`, owned separately).** This is the agreed
+**Audience: the frontend (`apps/web`).** This is the agreed
 interface. The authoritative, always-current schema is the OpenAPI document the
 running backend generates:
 
