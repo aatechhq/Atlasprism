@@ -1,6 +1,6 @@
 [project]
 name = "atlas-prism-api"
-version = "0.1.0"
+version = "0.5.0"
 description = "ATLAS Prism V0.1 backend - AI assurance platform for N-ATLAS integrations (NAIC PS1)"
 requires-python = ">=3.11"
 dependencies = [
