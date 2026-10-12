@@ -1,0 +1,20 @@
+name = "acme-bank-assistant"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+# GUARDRAIL_MODE starts at "weak" so the first black-box run finds the real
+# vulnerability. Flipping it to "hardened" is the fix, applied to the
+# APPLICATION -- which is the whole argument for testing the application
+# rather than the model.
+[vars]
+GUARDRAIL_MODE = "weak"
+NATLAS_MODEL_ID = "NCAIR1/N-ATLaS"
+
+# The ownership token is published at a well-known URL by design, so it is a
+# var rather than a secret -- calling it a secret would be theatre. It is set
+# here once ATLAS Prism issues it, then deployed.
+# PRISM_VERIFICATION_VALUE = "prism-verification=<token>"
+
+# NATLAS_BASE_URL and NATLAS_API_KEY are the only real secrets, set with
+# `wrangler secret put`. The upstream key must never appear in a file.
