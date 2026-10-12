@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import current_user, owned_connection, owned_project, owned_run
-from app.connectors.natlas import NatlasConnector
+from app.api.v1.projects import connector_for
 from app.core.errors import BadRequest
 from app.db.session import get_db
 from app.engines.pulse import metrics as pulse
@@ -68,7 +68,7 @@ def create_run(
     except ValueError as exc:
         raise BadRequest(str(exc))
 
-    connector = NatlasConnector(base_url=conn.endpoint, model_id=conn.model_id)
+    connector = connector_for(conn)
     background.add_task(run_engine.execute_run, run.id, connector)
     return RunCreateResponse(run_id=run.id, status=run.status, total_cases=run.total_cases)
 
@@ -143,7 +143,7 @@ def retest_run(
     except ValueError as exc:
         raise BadRequest(str(exc))
 
-    connector = NatlasConnector(base_url=conn.endpoint, model_id=conn.model_id)
+    connector = connector_for(conn)
     background.add_task(run_engine.execute_run, run.id, connector)
     return RunCreateResponse(run_id=run.id, status=run.status, total_cases=run.total_cases)
 

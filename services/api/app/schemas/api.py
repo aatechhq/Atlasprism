@@ -66,10 +66,27 @@ class ProjectOut(ORMModel):
 
 
 # --- connections ---
+class HostVerificationCreate(BaseModel):
+    project_id: uuid.UUID
+    host: str = Field(min_length=1, max_length=255)
+
+
+class HostVerificationOut(ORMModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    host: str
+    method: str | None
+    verified_at: dt.datetime | None
+    last_error: str | None
+    created_at: dt.datetime
+
+
 class ConnectionCreate(BaseModel):
     project_id: uuid.UUID
     name: str | None = Field(default=None, max_length=200)
-    provider: Literal["natlas"] = "natlas"
+    # "natlas" targets the documented gateway. "openai_compatible" targets an
+    # endpoint the developer runs, and requires a verified host first.
+    provider: Literal["natlas", "openai_compatible"] = "natlas"
     endpoint: str | None = Field(default=None, max_length=500)
     model_id: str | None = Field(default=None, max_length=200)
 

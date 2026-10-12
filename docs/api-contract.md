@@ -89,7 +89,11 @@ Suggested: ~15 s for ordinary reads, **≥ 90 s** for `/verify`, and no timeout
 | `POST` | `/projects` | `{name, description?, app_system_prompt?, gate_min_pass_rate?, gate_max_critical_findings?}` → 201 |
 | `GET` | `/projects` | Caller's projects, newest first |
 | `PATCH` | `/projects/{id}` | Partial update of the same fields → 200 |
-| `POST` | `/connections` | `{project_id, endpoint?, model_id?}` → 201. Omitted fields use server defaults. |
+| `POST` | `/connections` | `{project_id, provider?, endpoint?, model_id?}` → 201. `provider` is `natlas` (default) or `openai_compatible`; the latter requires a verified host. |
+| `POST` | `/verifications` | `{project_id, host}` → 201. Begins proving the project controls a host. |
+| `GET` | `/verifications/{id}/instructions` | Exactly what to publish, by DNS TXT or https file |
+| `POST` | `/verifications/{id}/check?method=dns_txt\|https_file` | Performs the check |
+| `GET` | `/verifications?project_id=` | Verification records for a project |
 | `GET` | `/connections?project_id=` | Safe metadata only |
 | `POST` | `/connections/{id}/verify` | Performs a **real** inference call. Slow (seconds). |
 | `GET` | `/connections/{id}/gateway-health` | Diagnostics only — **never** show this as "integration verified" |
@@ -432,3 +436,65 @@ reconstruct them.
 Render the `note`: a language with 4 cases and a 0.75 pass rate is a weak
 signal, and a reader will otherwise compare it to one with 36 cases as if they
 were equivalent. Consider showing `cases` beside every rate.
+
+---
+
+## Testing a developer's own endpoint (`provider: openai_compatible`)
+
+A connection may target an endpoint the developer runs, rather than the N-ATLAS
+gateway — their assistant, with its retrieval, tools and guardrails in the path.
+That is a better subject of evaluation than a system prompt replayed against the
+base model, because it is what actually ships.
+
+**Two independent controls, both required.** Neither substitutes for the other,
+and the UI should present them as separate steps.
+
+### 1. Containment — is this address safe to reach
+
+Enforced by `app/core/netguard.py` at connection creation **and again on every
+inference call**, because DNS can change in between. Refused: private,
+loopback, link-local, CGNAT, multicast and reserved space in v4 and v6
+(including IPv4-mapped v6); plain http to a remote host; credentials embedded
+in the URL; URL fragments; non-standard ports. Every resolved address is
+checked, not just the first.
+
+A refusal here surfaces as `400` with a specific reason, or as an inference
+outcome of `blocked` — which, like every other error outcome, is excluded from
+the pass rate and never counted as a failed test.
+
+### 2. Authorisation — may this project send attacks there
+
+Shield sends prompt-injection and secret-extraction attempts, so a checkbox is
+not consent. The project must prove control of the host:
+
+```
+POST /api/v1/verifications          {project_id, host}        -> 201 + token
+GET  /api/v1/verifications/{id}/instructions                  -> what to publish
+POST /api/v1/verifications/{id}/check?method=dns_txt          -> verifies
+POST /api/v1/verifications/{id}/check?method=https_file        -> verifies
+```
+
+| Method | What the user publishes | What it proves |
+|---|---|---|
+| `dns_txt` | `_atlas-prism.<host>` TXT = `atlas-prism-verification=<token>` | Control of the domain's DNS |
+| `https_file` | `https://<host>/.well-known/atlas-prism-verification.txt` containing the same value | Control of the web server |
+
+DNS is resolved over DNS-over-HTTPS, so verification behaves identically inside
+a container. The file method runs the containment check before fetching and
+refuses redirects — verification must not itself become an SSRF vector.
+
+A failed check records `last_error` on the verification and returns `400` with
+that reason; the record stays unverified. **Creating a connection to an
+unverified host is refused with `400` and `verification_required: true`** in the
+error payload — render that as a link into the verification flow rather than a
+dead end.
+
+### What the UI must not imply
+
+- A verified host is **not** a safe host. Verification proves control, nothing
+  more.
+- `model_id` from such an endpoint is **as reported by the endpoint**. A black
+  box cannot be made to prove what is behind it, and the response records it as
+  `model_reported_by_endpoint` for that reason.
+- Token usage and latency are only as trustworthy as the endpoint's own
+  reporting.

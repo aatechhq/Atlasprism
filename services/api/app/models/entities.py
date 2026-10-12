@@ -13,6 +13,7 @@ import uuid
 
 from sqlalchemy import (
     Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, func,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -284,6 +285,37 @@ class SecurityFinding(Base):
     created_at: Mapped[dt.datetime] = _created()
 
     run_case: Mapped[RunCase] = relationship(back_populates="findings")
+
+
+class HostVerification(Base):
+    """Proof that a project owns a host before Shield may target it.
+
+    Containment answers whether an address is safe to reach. This answers
+    whether the caller is permitted to send adversarial traffic there, which is
+    an authorisation question and cannot be satisfied by a checkbox.
+    """
+
+    __tablename__ = "host_verifications"
+
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    host: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    token: Mapped[str] = mapped_column(String(100), nullable=False)
+    # dns_txt | https_file -- the method that actually succeeded
+    method: Mapped[str | None] = mapped_column(String(20))
+    verified_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = _created()
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "host", name="uq_host_verification_project_host"),
+    )
+
+    @property
+    def is_verified(self) -> bool:
+        return self.verified_at is not None
 
 
 class ReportExport(Base):
