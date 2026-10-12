@@ -86,8 +86,9 @@ Suggested: ~15 s for ordinary reads, **≥ 90 s** for `/verify`, and no timeout
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/projects` | `{name, description?}` → 201 |
+| `POST` | `/projects` | `{name, description?, app_system_prompt?, gate_min_pass_rate?, gate_max_critical_findings?}` → 201 |
 | `GET` | `/projects` | Caller's projects, newest first |
+| `PATCH` | `/projects/{id}` | Partial update of the same fields → 200 |
 | `POST` | `/connections` | `{project_id, endpoint?, model_id?}` → 201. Omitted fields use server defaults. |
 | `GET` | `/connections?project_id=` | Safe metadata only |
 | `POST` | `/connections/{id}/verify` | Performs a **real** inference call. Slow (seconds). |
@@ -101,8 +102,13 @@ Suggested: ~15 s for ordinary reads, **≥ 90 s** for `/verify`, and no timeout
 | `GET` | `/runs?project_id=` | Last 100 runs |
 | `GET` | `/runs/{id}` | Status + counts — **poll this** |
 | `GET` | `/runs/{id}/results?limit=&offset=&state=` | Paginated case results |
+| `GET` | `/runs/{id}/compare?baseline_run_id=` | Case-by-case diff against an earlier run of the same project |
+| `POST` | `/runs/{id}/retest` | → **202**. Re-runs only the cases that did not pass, using current definitions |
+| `GET` | `/runs/{id}/gate` | Release decision against the project's thresholds |
+| `GET` | `/runs/{id}/findings` | Shield findings with severity, rationale and mitigation |
 | `GET` | `/traces?project_id=&run_id=&limit=&offset=` | Inference traces |
 | `GET` | `/metrics/summary?project_id=&run_id=` | Pulse aggregates |
+| `GET` | `/metrics/languages?project_id=&run_id=` | Pulse aggregates per declared language |
 | `GET` | `/reports/{run_id}` | Full report JSON |
 | `GET` | `/reports/{run_id}/export?format=json\|csv` | File download (`Content-Disposition`) |
 
@@ -285,3 +291,144 @@ is rejected with `400`. Mirror these rules in the form to fail fast.
 
 `repeat_count` is 1–5. `max_concurrency` on a run is 1–8, further capped by the
 server's `RUN_MAX_CONCURRENCY`.
+
+---
+
+## Application profile and release thresholds (project fields)
+
+Three fields were added to `projects`. All optional; all returned by
+`GET /projects`, `POST /projects` and `PATCH /projects/{id}`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `app_system_prompt` | `string \| null`, ≤20000 | The system prompt and rules of the developer's **own** assistant. Prism sends it ahead of every test case. |
+| `gate_min_pass_rate` | `number \| null`, 0.0–1.0 | Minimum pass rate for a release gate. |
+| `gate_max_critical_findings` | `integer \| null`, ≥0 | Maximum critical Shield findings for a release gate. |
+
+**Why `app_system_prompt` matters for the UI.** Without it Prism evaluates the
+base N-ATLAS model, which a developer cannot act on. With it, Guard measures
+adherence to *their* instructions and Shield tries to override *their* rules,
+so every failure maps to something they own. Treat it as the primary field on
+the project form, not an afterthought.
+
+Each run **freezes** the profile into every case snapshot
+(`case_snapshot.app_system_prompt`), so editing the project later never changes
+a historical result. Say that near the field, or a user will assume editing it
+rewrites past runs.
+
+## `GET /runs/{id}/compare?baseline_run_id=`
+
+Both runs must belong to the same project. Comparing a run with itself → 400.
+
+```json
+{
+  "baseline": { "id": "...", "pass_rate": 0.75, "passed": 15, "failed": 5, "errors": 0, "...": "..." },
+  "current":  { "id": "...", "pass_rate": 0.75, "...": "..." },
+  "pass_rate_delta": 0.0,
+  "summary": { "regressed": 1, "fixed": 1, "still_passing": 14,
+               "still_failing": 4, "inconclusive": 0, "added": 0, "removed": 0 },
+  "low_confidence_changes": 2,
+  "cases": [
+    { "case": "S06 code-switched injection (Hausa)", "engine": "shield",
+      "severity": "high", "verdict": "regressed", "low_confidence": true,
+      "baseline": { "state": "passed", "passed": true, "repeat_count": 1, "explanation": "..." },
+      "current":  { "state": "failed", "passed": false, "repeat_count": 1, "explanation": "..." } }
+  ],
+  "interpretation": { "model_changed": false, "scoring_changed": false, "...": "..." }
+}
+```
+
+**Three rules the UI must not flatten.**
+
+1. **`inconclusive` is not a regression.** It means one side errored. Render it
+   in a neutral colour, never red, and never count it toward a regression
+   total — an error is a service problem, not a failed test.
+2. **`low_confidence: true` must be visible on the case.** It marks a flip
+   measured from a single generation on each side, which sampling alone can
+   produce. Show the caveat and the remedy (`repeat_count`). A regression badge
+   with no confidence marker is the most misleading thing this screen could do.
+3. **`model_changed` / `scoring_changed`** mean the two runs are not strictly
+   comparable. Surface a banner when either is true.
+
+`pass_rate_delta` is `null` when either run has no scored case. Do not render
+`0` in that case.
+
+## `POST /runs/{id}/retest`
+
+→ 202 `{run_id, status, total_cases}`, same shape as `POST /runs`. Poll
+`GET /runs/{new_id}` as usual, then offer **Compare against the original run**.
+
+Returns 400 when every case passed (nothing to retest) or when the cases no
+longer exist. Errored cases **are** retested: an error means the case never
+reached a verdict.
+
+## `GET /runs/{id}/gate`
+
+```json
+{
+  "verdict": "block",
+  "run_status": "completed",
+  "checks": [ { "check": "minimum_pass_rate", "threshold": 0.95,
+                "observed": 0.75, "met": false, "detail": null } ],
+  "observed": { "pass_rate": 0.75, "passed": 15, "failed": 5, "errors": 0,
+                "scored_cases": 20, "findings_by_severity": { "high": 3, "medium": 1 },
+                "pass_rate_definition": "passed / (passed + failed); errored cases excluded" },
+  "limitations": [ "..." ],
+  "notes": null
+}
+```
+
+`verdict` is one of:
+
+| Verdict | Render as |
+|---|---|
+| `pass` | met the project's own declared policy — **not** "safe" or "approved" |
+| `block` | at least one check failed; show which, with observed vs threshold |
+| `not_configured` | no thresholds set. Show the `notes` text and a link to set them. **Never render this as a pass.** |
+| `inconclusive` | the run did not finish or produced no scored case |
+
+Always render the `limitations` array. It states that thresholds are the
+project's own policy rather than an external standard, and that a run with
+errors has incomplete evidence even when the gate passes.
+
+## `GET /runs/{id}/findings`
+
+```json
+{
+  "total": 4,
+  "by_severity": { "high": 3, "medium": 1 },
+  "findings": [
+    { "run_case_id": "...", "case": "S02 system instruction override",
+      "engine": "shield", "state": "failed", "category": "...",
+      "severity": "high", "rule_id": "...", "evidence": "...",
+      "mitigation": "...", "severity_rationale": "..." }
+  ],
+  "note": "A finding is a reproducible test outcome against a pre-declared rule, not a proof of exploitability in production. Seeded secret literals are redacted."
+}
+```
+
+Show `severity_rationale` next to the severity badge — a severity with no
+explanation was the open beta-tester request. Show `mitigation` as the action.
+`evidence` is already redacted of seeded literals; do not attempt to
+reconstruct them.
+
+## `GET /metrics/languages?project_id=&run_id=`
+
+```json
+{
+  "languages": [
+    { "language": "en", "cases": 36, "passed": 27, "failed": 9, "errors": 0,
+      "scored_cases": 36, "pass_rate": 0.75,
+      "latency_ms": { "sample_count": 38, "median": 900, "p95": 1241 } },
+    { "language": "ha", "cases": 4, "passed": 3, "failed": 1, "errors": 0,
+      "scored_cases": 4, "pass_rate": 0.75,
+      "latency_ms": { "sample_count": 4, "median": 1800, "p95": 2111 } }
+  ],
+  "pass_rate_definition": "...", "latency_population": "successful inference attempts only",
+  "note": "Language is the value each test case declared, not detected from the response. ..."
+}
+```
+
+Render the `note`: a language with 4 cases and a 0.75 pass rate is a weak
+signal, and a reader will otherwise compare it to one with 36 cases as if they
+were equivalent. Consider showing `cases` beside every rate.
