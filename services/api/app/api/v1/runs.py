@@ -15,6 +15,7 @@ from app.core.errors import BadRequest
 from app.db.session import get_db
 from app.engines.pulse import metrics as pulse
 from app.evaluation import runner as run_engine
+from app.evaluation.comparison import compare_runs, non_passing_case_ids
 from app.models import InferenceTrace, ModelConnection, ReportExport, RunCase, TestRun, TestSuite, User
 from app.reporting.exporter import build_csv, build_report
 from app.schemas.api import (
@@ -61,6 +62,81 @@ def create_run(
         run = run_engine.create_run(
             db, project_id=body.project_id, connection=conn,
             suites=suites, max_concurrency=body.max_concurrency,
+        )
+    except ValueError as exc:
+        raise BadRequest(str(exc))
+
+    connector = NatlasConnector(base_url=conn.endpoint, model_id=conn.model_id)
+    background.add_task(run_engine.execute_run, run.id, connector)
+    return RunCreateResponse(run_id=run.id, status=run.status, total_cases=run.total_cases)
+
+
+@router.get("/runs/{run_id}/compare")
+def compare_run(
+    run_id: uuid.UUID,
+    baseline_run_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> dict:
+    """Case-by-case diff of this run against an earlier one.
+
+    Answers "did my fix work, and did I break anything else" -- regression
+    testing, and the evidence behind a release decision.
+
+    Two distinctions are preserved rather than flattened into a single number:
+    a case where either side errored is `inconclusive`, never a regression,
+    because an error is a service problem and not a failed test; and a flip
+    measured from one generation on each side is marked `low_confidence`,
+    because generation is sampled and that may be variance.
+    """
+    current = owned_run(run_id, db, user)
+    baseline = owned_run(baseline_run_id, db, user)
+    if baseline.id == current.id:
+        raise BadRequest("Cannot compare a run with itself.")
+    if baseline.project_id != current.project_id:
+        raise BadRequest("Both runs must belong to the same project.")
+    return compare_runs(db, baseline=baseline, current=current)
+
+
+@router.post("/runs/{run_id}/retest", response_model=RunCreateResponse, status_code=202)
+def retest_run(
+    run_id: uuid.UUID,
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> RunCreateResponse:
+    """Re-run only the cases that did not pass, using the CURRENT definitions.
+
+    This is the verification half of a fix: change the application prompt or a
+    case, retest, and compare. Errored cases are included because an error
+    means the case was never scored and still needs an answer.
+
+    The new run reads cases and the project's application profile live -- a
+    retest that replayed the old snapshots would prove nothing about the fix.
+    """
+    source = owned_run(run_id, db, user)
+    conn = owned_connection(source.connection_id, db, user)
+
+    case_ids = non_passing_case_ids(db, source)
+    if not case_ids:
+        raise BadRequest(
+            "Every case in that run passed; there is nothing to retest.",
+            run_id=str(source.id),
+        )
+
+    suites = list(db.scalars(
+        select(TestSuite).where(
+            TestSuite.id.in_([uuid.UUID(s) for s in source.suite_ids]),
+            TestSuite.project_id == source.project_id,
+        )
+    ).all())
+    if not suites:
+        raise BadRequest("The suites from that run no longer exist in this project.")
+
+    try:
+        run = run_engine.create_run(
+            db, project_id=source.project_id, connection=conn, suites=suites,
+            max_concurrency=source.max_concurrency, only_case_ids=case_ids,
         )
     except ValueError as exc:
         raise BadRequest(str(exc))

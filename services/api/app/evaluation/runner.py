@@ -79,17 +79,31 @@ def create_run(
     connection: ModelConnection,
     suites: list[TestSuite],
     max_concurrency: int | None = None,
+    only_case_ids: list[uuid.UUID] | None = None,
 ) -> TestRun:
-    """Persist run + cases first. Nothing is executed here."""
+    """Persist run + cases first. Nothing is executed here.
+
+    `only_case_ids` narrows the run to a subset -- used by retest, to re-run
+    just the cases that did not pass. The cases are read LIVE, not from the
+    previous run's snapshots, because the whole point of a retest is to
+    exercise the current definitions and the current application profile.
+    """
     concurrency = max(1, min(int(max_concurrency or settings.run_max_concurrency),
                              settings.run_max_concurrency))
+    wanted = set(only_case_ids) if only_case_ids else None
     cases: list[tuple[TestCase, TestSuite]] = []
     for suite in suites:
         for case in sorted(suite.cases, key=lambda c: c.name):
+            if wanted is not None and case.id not in wanted:
+                continue
             cases.append((case, suite))
 
     if not cases:
-        raise ValueError("Cannot start a run with zero test cases.")
+        raise ValueError(
+            "Cannot start a run with zero test cases."
+            if wanted is None else
+            "None of the cases to retest still exist in the selected suites."
+        )
     if len(cases) > settings.run_max_cases:
         raise ValueError(
             f"Run would execute {len(cases)} cases, above RUN_MAX_CASES="
