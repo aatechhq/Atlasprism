@@ -100,9 +100,17 @@ def connector_for(conn: ModelConnection):
     another -- which would be a way to reach an unverified host.
     """
     if conn.provider == "openai_compatible":
+        # NO CREDENTIAL IS SENT. The N-ATLAS key belongs to the N-ATLAS
+        # gateway, and this endpoint is a third party's. Proving control of a
+        # host entitles someone to be TESTED, not to receive our credential --
+        # sending it would hand a Bearer token to any host that passed
+        # verification. Per-connection credential storage is the feature that
+        # would allow an authenticated black-box target; until it exists, such
+        # an endpoint must accept unauthenticated requests, and a 401 is
+        # reported honestly as outcome `auth` rather than as a failed test.
         return GenericHttpConnector(
             base_url=conn.endpoint, model_id=conn.model_id,
-            api_key=settings.natlas_api_key or None,
+            api_key=None,
             timeout_ms=settings.natlas_timeout_ms,
         )
     return connector_for(conn)
