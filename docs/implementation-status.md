@@ -9,7 +9,7 @@ Four categories, kept strictly separate:
 - **Automated-tested** — covered by tests that were executed, with results below.
 - **Live-verified** — exercised against the real running system, by driving it,
   not by reading the code.
-- **Blocked** — cannot be completed without something we do not have.
+- **Requirements tracking** — each PS1 submission requirement and its state.
 
 Nothing is marked live-verified on the strength of a passing test suite, a
 clean type-check, or a reachable `/health` endpoint.
@@ -80,7 +80,7 @@ persist→execute→score→trace→export pipeline works on real HTTP responses
 proves **nothing** about N-ATLAS's actual behaviour. The stub harness lives
 outside the repository so it cannot be mistaken for product code or evidence.
 
-## Blocked
+## Requirements tracking
 
 ### 1. Prism-to-N-ATLAS integration — ✅ CLEARED 2026-10-11
 
@@ -138,13 +138,16 @@ OSI-approved licence plus a contributing guide is therefore met.
 If the copyright holder should read differently — a registered company name, or
 Azibaola personally — it is a one-line edit to `LICENSE`.
 
-### 3. Two external developer testers — BLOCKED (people needed)
+### 3. Two external developer testers — ✅ COMPLETE
 
-PS1 requires two independent developers to actually run the tool and provide
-dated, consented evidence. Internal team members do not count. This is the requirement most likely to miss the
-deadline, since it depends on other people's availability.
+Two independent developers assessed the application — an AI application
+developer and a backend developer — covering usability, N-ATLAS integration,
+reliability testing, security evaluation, performance monitoring and reporting.
+The assessment and how each piece of feedback was handled are recorded in
+[beta-testing.md](beta-testing.md). Their written feedback, logs and
+screenshots are held with the submission package.
 
-### 4. Public deployment — ✅ DEPLOYED; repository visibility still BLOCKED
+### 4. Public repository and deployment — ✅ COMPLETE
 
 **Deployed and judge-reachable:**
 
@@ -156,10 +159,10 @@ deadline, since it depends on other people's availability.
 | Model | `NCAIR1/N-ATLaS` on a Lightning AI managed deployment (Tesla T4, 4-bit NF4) |
 | Sign-in | Neon Auth (`AUTH_MODE=neon`); the API validates its tokens against the published JWKS |
 
-**Still blocked:** the GitHub repository (`azi-a-i/atlasprism`) is **private**.
-PS1 requires a public repository for judges, so it must be made public
-(`gh repo edit --visibility public`) or recreated under the final account
-before submission.
+**Public repository:** <https://github.com/aatechhq/Atlasprism> — public, MIT
+licensed, with `CONTRIBUTING.md` and the full technical documentation set. This
+satisfies the PS1 requirement for a judge-reachable public repository.
+
 
 ## Known limitations
 

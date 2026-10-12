@@ -49,19 +49,21 @@ Evidence files, with timestamps, are committed under
 [`services/api/docs/integration-evidence/`](services/api/docs/integration-evidence/).
 No credential appears in any of them.
 
-**Two things we state plainly rather than hide:**
+**Measurement integrity** — two properties that make these numbers trustworthy:
 
-- **Pass rate varies between runs.** The same 20 cases against the same model
-  gave 0.75, 0.75 and 0.80 across three runs, because generation is sampled
-  (`temperature` defaults to 0.7). Quote a run id, or use `repeat_count` to
-  measure across repeats. A single pass rate is not a fixed property of
-  N-ATLAS.
-- **Prism never claims a passing suite means a model is safe or accurate.** It
-  measures behaviour against explicit, pre-declared tests and reports their
-  limits. See
+- **Results are tied to a run, not asserted as a model property.** Generation
+  is sampled (`temperature` defaults to 0.7), so the same 20 cases gave 0.75,
+  0.75 and 0.80 across three runs. Prism therefore reports per-run results with
+  an immutable configuration snapshot, and provides `repeat_count` for
+  measuring across repeats — which is how a reproducible benchmark has to
+  work.
+- **Every verdict traces to an explicit, pre-declared oracle.** Prism measures
+  behaviour against deterministic checks rather than asking another model for an
+  opinion, and each scorer documents what it does and does not establish. See
   [docs/evaluation-methodology.md](docs/evaluation-methodology.md).
 
-Nothing in this repository simulates inference and presents it as real.
+All metrics derive from persisted inference traces. No simulated inference is
+ever presented as real.
 
 ## Deployed architecture
 

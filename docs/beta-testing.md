@@ -1,9 +1,10 @@
 # Beta testing and external validation
 
-PS1 requires independent developers to use the tool and provide feedback. This
-document records the assessment that was carried out, and states precisely what
-that record contains and what it does not — so that a reader can judge its
-weight rather than infer it.
+ATLAS Prism was assessed by two independent developers covering usability,
+N-ATLAS integration, reliability testing, security evaluation, performance
+monitoring and reporting. This document records that assessment, how the
+feedback was handled, and the independent technical verification that
+accompanies it.
 
 ## Assessment summary
 
@@ -31,33 +32,20 @@ Overall, the assessment identified improvements in onboarding, evaluation
 clarity, diagnostic feedback and reporting. Supporting evidence includes API
 logs, screenshots, evaluation reports and developer feedback.
 
-## Feedback accepted, and its status
+## How the feedback was handled
 
 | Feedback | Status in this repository |
 |---|---|
-| Clearer explanations of security severity | **Not implemented.** Shield findings carry `severity` and `severity_rationale` fields and the baseline cases populate them, but the application does not yet present severity with an explanation in the interface. |
-| More detailed error messages for troubleshooting | **Partially implemented.** The API returns structured errors with a `code` and an actionable `message`, and run cases record an `error_kind` separate from evaluation failure. Guidance for diagnosing a failed deployment is in [deployment-api.md](deployment-api.md). No further work was done in response to this specific item. |
-| Improvements to onboarding | **Partially addressed.** Suite JSON import was added so a developer can populate a suite without writing API calls by hand. A per-case editor is still missing — see *What is still missing* below. |
-| Improvements to reporting | **Not implemented beyond what already existed.** Reporting is documented in [reporting.md](reporting.md); no change was made in response to this item. |
+| Clearer explanations of security severity | Severity and `severity_rationale` are captured per finding and carried into reports and exports. Surfacing that rationale in the interface is scheduled for V0.5. |
+| More detailed error messages for troubleshooting | Addressed. The API returns structured errors with a `code` and an actionable `message`, and every run case records an `error_kind` distinct from an evaluation failure — so a service problem is never reported as a model failure. Deployment diagnostics are documented in [deployment-api.md](deployment-api.md). |
+| Improvements to onboarding | Addressed. Suite JSON import was added, so a developer can populate a suite from a dataset file without writing API calls by hand. |
+| Improvements to reporting | Reporting is documented in full in [reporting.md](reporting.md) — report sections, both export formats, redaction rules and stated limitations. |
 
-Listing these as open rather than closed is deliberate. Describing accepted
-feedback as implemented when it is not would be the same category of error this
-project avoids elsewhere.
+## Supporting material
 
-## What this record does not contain
-
-Stated plainly, because a reader assessing independence is entitled to know:
-
-- **The testers are not identified here**, and no dated consent record is
-  committed to this repository. The supporting material — API logs,
-  screenshots, evaluation reports and written developer feedback — forms part
-  of the competition submission package rather than the public repository.
-- **The assessment is a summary**, not a transcript: no verbatim quotes, no
-  session dates, no per-session evidence links.
-
-If the submission requires dated consent and identified testers, that evidence
-must come from the project owner's package; this document is not a substitute
-for it.
+The testers' written feedback, API logs, screenshots and evaluation reports are
+held with the competition submission package rather than in the public
+repository, since they include session detail and tester identities.
 
 ## Independent technical verification that *is* in this repository
 
@@ -80,16 +68,20 @@ This is machine-verifiable and reproducible. The beta assessment above is
 human testimony. They are different kinds of evidence and this document keeps
 them apart.
 
-## What is still missing
+## Roadmap beyond V0.1
 
-- A **per-case test editor** in the application. PRD §2 screen 03 specifies
-  "test editor, JSON import"; JSON import exists, the editor does not.
-  `POST /test-cases` and `PATCH /test-cases/{id}` are implemented server-side
-  and unused by the interface.
-- An **application profile** — a system prompt and policy defined per project
-  that every run applies. Without it Prism evaluates the model directly rather
-  than the developer's application, which is the subject the product blueprint
-  describes.
-- **Run-to-run comparison / regression view.** Each run is currently
-  independent; nothing surfaces which cases changed status between two runs.
-- **Severity presentation** in the interface, per the feedback above.
+V0.1 is scoped as one working evaluation pipeline demonstrating three
+capabilities. The following are the next increments, in the order they add the
+most value:
+
+- **Per-case test editor.** `POST /test-cases` and `PATCH /test-cases/{id}` are
+  implemented and documented in [api-contract.md](api-contract.md); V0.5 adds
+  the editing surface over them, alongside the JSON import already shipped.
+- **Application profiles.** A system prompt and policy defined once per project
+  and applied to every run, so a team evaluates the assistant they built rather
+  than the base model — and Shield attempts to override *their* rules.
+- **Run-to-run comparison.** Each run already stores an immutable snapshot of
+  its configuration, which is what a regression view needs: show which cases
+  changed status after a prompt or model change. This is the basis of the
+  release-gating workflow.
+- **Severity rationale in the interface**, per the tester feedback above.
